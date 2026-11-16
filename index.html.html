@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>خريطة وطقس</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: a full-bleed OSM map with floating search and layer chips; the forecast sits in a side panel (stacked under the map on phones). */
+:root{
+  --font:"IBM Plex Sans Arabic",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  --bg:#eaf0f4; --surface:#ffffff; --surface2:#f3f7fa; --line:#d6e0e8;
+  --ink:#0e1d28; --muted:#566a79; --accent:#0a6c8b; --accent-ink:#ffffff;
+  --sun:#f2a516; --moon:#bcc8de; --cloud:#9db0c2; --rain:#3b8fd9; --snow:#cfe3f5;
+  --cold:#4aa3df; --warm:#f2a516; --shadow:0 6px 22px rgba(14,29,40,.16);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0c161e; --surface:#142330; --surface2:#1a2d3c; --line:#254053;
+    --ink:#e9f1f6; --muted:#93a9b8; --accent:#4cc3e6; --accent-ink:#06222d;
+    --sun:#ffc23d; --moon:#aab7d1; --cloud:#6f879b; --rain:#59a8f0; --snow:#dcecf8;
+    --shadow:0 6px 22px rgba(0,0,0,.5);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:minmax(360px,430px) 1fr;height:100dvh}
+.panel{overflow-y:auto;padding:18px 18px 28px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.mapwrap{position:relative;min-width:0;min-height:0}
+#map{position:absolute;inset:0;background:var(--surface2)}
+
+/* floating map UI */
+.float{position:absolute;z-index:1200}
+.top{inset:12px 12px auto 12px;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.top>*{pointer-events:auto}
+.search{position:relative}
+.search form{display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:14px;box-shadow:var(--shadow);padding:0 12px;height:48px;border:1px solid var(--line)}
+.search svg{flex:none;color:var(--muted)}
+.search input{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:inherit;height:100%;outline:none}
+.search input::placeholder{color:var(--muted)}
+.results{position:absolute;inset-inline:0;top:54px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;max-height:50dvh;overflow-y:auto}
+.results[hidden]{display:none}
+.results button{display:block;width:100%;text-align:start;background:none;border:0;border-bottom:1px solid var(--line);padding:10px 14px}
+.results button:last-child{border-bottom:0}
+.results button:hover,.results button:focus-visible{background:var(--surface2)}
+.results b{display:block;font-weight:600}
+.results small{color:var(--muted)}
+.results .none{padding:12px 14px;color:var(--muted)}
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;box-shadow:var(--shadow);font-weight:500;font-size:14px}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.measure-bar{display:flex;align-items:center;gap:10px;align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px 8px 6px 12px;font-weight:500}
+.measure-bar[hidden]{display:none}
+.measure-bar button{border:1px solid var(--line);background:var(--surface2);border-radius:8px;padding:2px 10px;font-size:13px}
+.tools{inset-inline-end:12px;bottom:34px;display:flex;flex-direction:column;gap:10px}
+.fab{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);display:grid;place-items:center}
+.fab[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.leaflet-top.leaflet-left{top:112px}
+.leaflet-container{font-family:var(--font)}
+.pin{display:block;width:22px;height:22px;border-radius:50% 50% 50% 0;background:var(--accent);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);transform:rotate(-45deg)}
+.mpt{background:#fff;border:3px solid var(--accent);border-radius:50%}
+
+/* weather panel */
+.place h1{margin:0;font-size:22px;line-height:1.25;font-weight:700}
+.place p{margin:2px 0 0;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px}
+.now{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.now .temp{font-size:68px;font-weight:600;line-height:1;letter-spacing:-2px;font-variant-numeric:tabular-nums}
+.now .cond{font-size:18px;font-weight:600;margin-top:6px}
+.now .feels{color:var(--muted);font-size:14px}
+.now svg{width:92px;height:92px;flex:none}
+.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px}
+.metric{background:var(--surface2);border-radius:12px;padding:10px 12px;min-width:0}
+.metric span{display:block;font-size:12px;color:var(--muted)}
+.metric b{display:block;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.metric small{display:block;color:var(--muted);font-size:12px}
+.card h2{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+.hours{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
+.hour{flex:none;width:58px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:2px;font-variant-numeric:tabular-nums}
+.hour small{color:var(--muted);font-size:12px}
+.hour svg{width:34px;height:34px}
+.hour .rp{font-size:11px;color:var(--rain);min-height:16px;font-weight:600}
+.hour b{font-weight:600}
+.day{display:grid;grid-template-columns:78px 36px 38px 34px minmax(40px,1fr) 34px;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.day:first-of-type{border-top:0}
+.day .dn b{display:block;font-weight:600;line-height:1.2}
+.day .dn small{color:var(--muted);font-size:12px}
+.day svg{width:32px;height:32px}
+.day .rp{font-size:12px;color:var(--rain);font-weight:600}
+.day .lo{color:var(--muted);text-align:end}
+.day .hi{font-weight:600}
+.bar{position:relative;height:6px;border-radius:3px;background:var(--surface2)}
+.bar i{position:absolute;top:0;bottom:0;border-radius:3px;background:linear-gradient(to left,var(--cold),var(--warm))}
+.state{padding:28px 8px;text-align:center;color:var(--muted)}
+.state button{margin-top:10px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:6px 16px}
+.foot{font-size:12px;color:var(--muted);line-height:1.7}
+.foot a{color:var(--accent)}
+
+@media (max-width:820px){
+  .app{display:flex;flex-direction:column;height:auto;min-height:100dvh}
+  .mapwrap{order:-1;height:58dvh;flex:none}
+  .panel{overflow:visible;padding-bottom:calc(28px + env(safe-area-inset-bottom,0px))}
+  .now .temp{font-size:58px}
+}
+@media (prefers-reduced-motion:no-preference){
+  .card{animation:rise .35s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="panel" id="panel">
+    <div class="place">
+      <h1 id="placeName">جارٍ التحميل…</h1>
+      <p id="placeCoords">&nbsp;</p>
+    </div>
+    <div id="wx"><div class="state">جارٍ تحميل التوقعات…</div></div>
+    <p class="foot">بيانات الخرائط © مساهمو <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>، وهي نفس قاعدة البيانات التي يعتمد عليها OsmAnd. توقعات الطقس من <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>. البحث عبر Nominatim.</p>
+  </main>
+
+  <section class="mapwrap" aria-label="الخريطة">
+    <div id="map" dir="ltr"></div>
+    <div class="float top">
+      <div class="search">
+        <form id="searchForm" autocomplete="off" role="search">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <input id="q" type="search" placeholder="ابحث عن مدينة أو شارع أو معلم" aria-label="بحث عن مكان" enterkeyhint="search">
+        </form>
+        <div class="results" id="results" hidden></div>
+      </div>
+      <div class="chips" id="layers" role="group" aria-label="نوع الخريطة"></div>
+      <div class="measure-bar" id="measureBar" hidden>
+        <span>المسافة: <b id="measureVal">0</b></span>
+        <button type="button" id="measureUndo">تراجع</button>
+        <button type="button" id="measureClear">مسح</button>
+      </div>
+    </div>
+    <div class="float tools">
+      <button class="fab" id="measureBtn" aria-pressed="false" aria-label="قياس المسافة" title="قياس المسافة">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></svg>
+      </button>
+      <button class="fab" id="locateBtn" aria-label="موقعي الحالي" title="موقعي الحالي">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+      </button>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $ = function(s){return document.querySelector(s)};
+  var store = {
+    get:function(k){try{return localStorage.getItem(k)}catch(e){return null}},
+    set:function(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  };
+
+  /* ---------- Map ---------- */
+  var DEFAULT = {lat:24.7136, lon:46.6753, name:"الرياض"};
+  var saved = null;
+  try{saved = JSON.parse(store.get("loc")||"null")}catch(e){}
+  var start = saved && isFinite(saved.lat) ? saved : DEFAULT;
+
+  var map = L.map("map",{center:[start.lat,start.lon],zoom:store.get("zoom")?+store.get("zoom"):11,zoomControl:false,worldCopyJump:true});
+  L.control.zoom({position:"topleft",zoomInTitle:"تكبير",zoomOutTitle:"تصغير"}).addTo(map);
+  L.control.scale({imperial:false,position:"bottomleft"}).addTo(map);
+
+  var OSM_ATTR = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+  var LAYERS = {
+    std:{label:"خريطة",layer:L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{maxZoom:20,subdomains:"abcd",attribution:OSM_ATTR+' © <a href="https://carto.com/attributions">CARTO</a>'})},
+    osm:{label:"OpenStreetMap",layer:L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:OSM_ATTR})},
+    topo:{label:"تضاريس",layer:L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",{maxZoom:17,subdomains:"abc",attribution:OSM_ATTR+' © <a href="https://opentopomap.org">OpenTopoMap</a> (SRTM)'})},
+    cyc:{label:"طرق ومسارات",layer:L.tileLayer("https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",{maxZoom:20,subdomains:"abc",attribution:OSM_ATTR+' © <a href="https://www.cyclosm.org">CyclOSM</a>'})},
+    sat:{label:"قمر صناعي",layer:L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Imagery © Esri, Maxar, Earthstar Geographics"})}
+  };
+  var current = null;
+  var chipsEl = $("#layers");
+  Object.keys(LAYERS).forEach(function(key){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = LAYERS[key].label; b.dataset.key = key;
+    b.addEventListener("click", function(){ setLayer(key); });
+    chipsEl.appendChild(b);
+  });
+  function setLayer(key){
+    if(!LAYERS[key]) key = "std";
+    if(current) map.removeLayer(LAYERS[current].layer);
+    LAYERS[key].layer.addTo(map); current = key; store.set("layer", key);
+    chipsEl.querySelectorAll(".chip").forEach(function(c){ c.setAttribute("aria-pressed", String(c.dataset.key===key)); });
+  }
+  setLayer(store.get("layer")||"std");
+  map.on("zoomend", function(){ store.set("zoom", map.getZoom()); });
+
+  /* ---------- Location + place name ---------- */
+  var marker = null, wxToken = 0;
+  var pinIcon = L.divIcon({className:"",html:'<span class="pin"></span>',iconSize:[22,22],iconAnchor:[11,22]});
+
+  function fmtCoord(lat,lon){
+    return Math.abs(lat).toFixed(4)+"° "+(lat>=0?"شمالاً":"جنوباً")+"، "+Math.abs(lon).toFixed(4)+"° "+(lon>=0?"شرقاً":"غرباً");
+  }
+  function setLocation(lat, lon, name, opts){
+    opts = opts || {};
+    if(marker) marker.setLatLng([lat,lon]); else marker = L.marker([lat,lon],{icon:pinIcon,keyboard:false}).addTo(map);
+    if(opts.fly) map.flyTo([lat,lon], opts.zoom||Math.max(map.getZoom(),12), {duration:.8});
+    $("#placeCoords").textContent = fmtCoord(lat,lon);
+    var token = ++wxToken;
+    $("#placeName").textContent = name || "جارٍ تحديد الموقع…";
+    store.set("loc", JSON.stringify({lat:lat,lon:lon,name:name||""}));
+    loadWeather(lat, lon, token);
+    if(!name){
+      reverseName(lat, lon).then(function(n){
+        if(token!==wxToken) return;
+        n = n || "موقع محدد على الخريطة";
+        $("#placeName").textContent = n;
+        store.set("loc", JSON.stringify({lat:lat,lon:lon,name:n}));
+      });
+    }
+  }
+  function reverseName(lat, lon){
+    var url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=12&accept-language=ar&lat="+lat+"&lon="+lon;
+    return fetch(url).then(function(r){return r.json()}).then(function(j){
+      var a = j.address || {};
+      var place = a.city||a.town||a.village||a.suburb||a.municipality||a.county||a.state||j.name;
+      var country = a.country;
+      if(!place && !country) return "";
+      return [place,country].filter(Boolean).filter(function(v,i,arr){return arr.indexOf(v)===i}).join("، ");
+    }).catch(function(){return ""});
+  }
+
+  /* ---------- Search ---------- */
+  var qEl = $("#q"), resEl = $("#results"), timer = null, searchSeq = 0, lastHits = [];
+  function hideResults(){ resEl.hidden = true; }
+  function runSearch(){
+    var q = qEl.value.trim();
+    if(q.length<2){ hideResults(); return; }
+    var seq = ++searchSeq;
+    var url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&addressdetails=0&accept-language=ar&q="+encodeURIComponent(q);
+    fetch(url).then(function(r){return r.json()}).then(function(hits){
+      if(seq!==searchSeq) return;
+      lastHits = hits; resEl.innerHTML = "";
+      if(!hits.length){ resEl.innerHTML = '<div class="none">لا توجد نتائج مطابقة.</div>'; resEl.hidden = false; return; }
+      hits.forEach(function(h){
+        var parts = h.display_name.split(",").map(function(s){return s.trim()});
+        var b = document.createElement("button"); b.type = "button";
+        var t = document.createElement("b"); t.textContent = parts[0];
+        var s = document.createElement("small"); s.textContent = parts.slice(1,4).join("، ");
+        b.appendChild(t); b.appendChild(s);
+        b.addEventListener("click", function(){ pick(h); });
+        resEl.appendChild(b);
+      });
+      resEl.hidden = false;
+    }).catch(function(){
+      if(seq!==searchSeq) return;
+      resEl.innerHTML = '<div class="none">تعذر البحث الآن. تحقق من الاتصال وحاول مرة أخرى.</div>'; resEl.hidden = false;
+    });
+  }
+  function pick(h){
+    var lat = +h.lat, lon = +h.lon;
+    var name = h.display_name.split(",").slice(0,2).map(function(s){return s.trim()}).join("، ");
+    hideResults(); qEl.blur();
+    if(h.boundingbox){
+      var bb = h.boundingbox.map(Number);
+      map.flyToBounds([[bb[0],bb[2]],[bb[1],bb[3]]],{maxZoom:15,duration:.8});
+    } else { map.flyTo([lat,lon],13,{duration:.8}); }
+    setLocation(lat, lon, name);
+  }
+  qEl.addEventListener("input", function(){ clearTimeout(timer); timer = setTimeout(runSearch, 380); });
+  $("#searchForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    if(lastHits.length && !resEl.hidden) pick(lastHits[0]); else runSearch();
+  });
+  document.addEventListener("click", function(e){ if(!e.target.closest(".search")) hideResults(); });
+  qEl.addEventListener("keydown", function(e){ if(e.key==="Escape") hideResults(); });
+
+  /* ---------- My location ---------- */
+  var accCircle = null;
+  $("#locateBtn").addEventListener("click", function(){
+    if(!navigator.geolocation){ alert("المتصفح لا يدعم تحديد الموقع."); return; }
+    navigator.geolocation.getCurrentPosition(function(p){
+      var lat = p.coords.latitude, lon = p.coords.longitude;
+      if(accCircle) map.removeLayer(accCircle);
+      accCircle = L.circle([lat,lon],{radius:p.coords.accuracy,color:"#0a6c8b",weight:1,fillOpacity:.12}).addTo(map);
+      setLocation(lat, lon, null, {fly:true, zoom:14});
+    }, function(){
+      alert("تعذر الحصول على موقعك. اسمح للموقع باستخدام خدمة الموقع ثم أعد المحاولة.");
+    }, {enableHighAccuracy:true, timeout:12000});
+  });
+
+  /* ---------- Measure distance ---------- */
+  var measuring = false, pts = [], mLine = L.polyline([], {color:"#e8890c",weight:4,opacity:.9}), mDots = L.layerGroup();
+  var mBtn = $("#measureBtn"), mBar = $("#measureBar");
+  function fmtDist(m){ return m<1000 ? Math.round(m)+" م" : (m/1000).toFixed(m<10000?2:1)+" كم"; }
+  function updateMeasure(){
+    mLine.setLatLngs(pts);
+    var total = 0; for(var i=1;i<pts.length;i++) total += map.distance(pts[i-1],pts[i]);
+    $("#measureVal").textContent = fmtDist(total);
+    mDots.clearLayers();
+    pts.forEach(function(p){ L.circleMarker(p,{radius:6,weight:3,color:"#e8890c",fillColor:"#fff",fillOpacity:1}).addTo(mDots); });
+  }
+  mBtn.addEventListener("click", function(){
+    measuring = !measuring;
+    mBtn.setAttribute("aria-pressed", String(measuring));
+    mBar.hidden = !measuring;
+    if(measuring){ mLine.addTo(map); mDots.addTo(map); map.getContainer().style.cursor = "crosshair"; }
+    else { map.getContainer().style.cursor = ""; }
+  });
+  $("#measureUndo").addEventListener("click", function(){ pts.pop(); updateMeasure(); });
+  $("#measureClear").addEventListener("click", function(){ pts = []; updateMeasure(); });
+
+  map.on("click", function(e){
+    if(measuring){ pts.push(e.latlng); updateMeasure(); return; }
+    setLocation(e.latlng.lat, e.latlng.lng, null);
+  });
+
+  /* ---------- Weather ---------- */
+  function kindOf(c){
+    if(c===0||c===1) return "clear";
+    if(c===2) return "partly";
+    if(c===3) return "cloud";
+    if(c===45||c===48) return "fog";
+    if(c>=51&&c<=67) return "rain";
+    if(c>=71&&c<=77) return "snow";
+    if(c>=80&&c<=82) return "rain";
+    if(c===85||c===86) return "snow";
+    if(c>=95) return "storm";
+    return "cloud";
+  }
+  var TEXT = {0:"سماء صافية",1:"صافٍ غالباً",2:"غائم جزئياً",3:"غائم",45:"ضباب",48:"ضباب صقيعي",51:"رذاذ خفيف",53:"رذاذ",55:"رذاذ كثيف",56:"رذاذ متجمد",57:"رذاذ متجمد كثيف",61:"مطر خفيف",63:"مطر",65:"مطر غزير",66:"مطر متجمد",67:"مطر متجمد غزير",71:"ثلج خفيف",73:"ثلج",75:"ثلج كثيف",77:"حبيبات ثلج",80:"زخات مطر خفيفة",81:"زخات مطر",82:"زخات مطر غزيرة",85:"زخات ثلج",86:"زخات ثلج كثيفة",95:"عاصفة رعدية",96:"عاصفة رعدية مع برد",99:"عاصفة رعدية مع برد كثيف"};
+  function icon(code, isDay){
+    var k = kindOf(code), day = isDay!==0;
+    var sun = '<circle cx="24" cy="24" r="8" fill="var(--sun)"/><g stroke="var(--sun)" stroke-width="3" stroke-linecap="round"><path d="M24 6v5M24 37v5M6 24h5M37 24h5M11.3 11.3l3.5 3.5M33.2 33.2l3.5 3.5M11.3 36.7l3.5-3.5M33.2 14.8l3.5-3.5"/></g>';
+    var moon = '<path d="M30 8a16 16 0 1 0 10 28A14 14 0 0 1 30 8z" fill="var(--moon)"/>';
+    var body = day ? sun : moon;
+    var cloud = function(c){ return '<path d="M13 36h21a8 8 0 0 0 1.2-15.9A10.5 10.5 0 0 0 15 19.5 8.3 8.3 0 0 0 13 36z" fill="'+(c||"var(--cloud)")+'"/>'; };
+    var s;
+    if(k==="clear") s = body;
+    else if(k==="partly") s = '<g transform="translate(14 -4) scale(.7)">'+body+'</g>'+cloud();
+    else if(k==="cloud") s = cloud();
+    else if(k==="fog") s = cloud()+'<path d="M11 40h26M16 45h16" stroke="var(--cloud)" stroke-width="3" stroke-linecap="round"/>';
+    else if(k==="rain") s = cloud()+'<path d="M17 39l-2 6M25 39l-2 6M33 39l-2 6" stroke="var(--rain)" stroke-width="3" stroke-linecap="round"/>';
+    else if(k==="snow") s = cloud()+'<g fill="var(--snow)"><circle cx="17" cy="41" r="2.3"/><circle cx="25" cy="44" r="2.3"/><circle cx="33" cy="41" r="2.3"/></g>';
+    else s = cloud("var(--cloud)")+'<path d="M25 33l-6 9h5l-2 6 8-10h-5l3-5z" fill="var(--sun)"/>';
+    return '<svg viewBox="0 0 48 48" aria-hidden="true">'+s+'</svg>';
+  }
+  var DIRS = ["شمالية","شمالية شرقية","شرقية","جنوبية شرقية","جنوبية","جنوبية غربية","غربية","شمالية غربية"];
+  function uvLevel(u){ return u<3?"منخفض":u<6?"متوسط":u<8?"مرتفع":u<11?"مرتفع جداً":"شديد"; }
+  function t(x){ return Math.round(x)+"°"; }
+  function hourLabel(s){ var h = +s.slice(11,13); return (h%12||12)+" "+(h<12?"ص":"م"); }
+  function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]}); }
+
+  function loadWeather(lat, lon, token){
+    var box = $("#wx");
+    box.innerHTML = '<div class="state">جارٍ تحميل التوقعات…</div>';
+    var url = "https://api.open-meteo.com/v1/forecast?latitude="+lat.toFixed(4)+"&longitude="+lon.toFixed(4)+
+      "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,is_day"+
+      "&hourly=temperature_2m,weather_code,precipitation_probability,is_day"+
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max,sunrise,sunset"+
+      "&timezone=auto&forecast_days=5&wind_speed_unit=kmh";
+    fetch(url).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }).then(function(d){
+      if(token!==wxToken) return;
+      render(d);
+    }).catch(function(){
+      if(token!==wxToken) return;
+      box.innerHTML = '<div class="state">تعذر تحميل التوقعات.<br><button type="button" id="retry">إعادة المحاولة</button></div>';
+      $("#retry").addEventListener("click", function(){ loadWeather(lat, lon, token); });
+    });
+  }
+
+  function render(d){
+    var c = d.current, h = d.hourly, dy = d.daily;
+    var nowKey = c.time.slice(0,13);
+    var i0 = Math.max(0, h.time.findIndex(function(x){ return x.slice(0,13) >= nowKey; }));
+    var uv = dy.uv_index_max[0];
+    var html = '';
+
+    html += '<section class="card"><div class="now"><div><div class="temp">'+t(c.temperature_2m)+'</div>'+
+      '<div class="cond">'+esc(TEXT[c.weather_code]||"")+'</div>'+
+      '<div class="feels">الإحساس بـ '+t(c.apparent_temperature)+' · العظمى '+t(dy.temperature_2m_max[0])+' والصغرى '+t(dy.temperature_2m_min[0])+'</div></div>'+
+      icon(c.weather_code, c.is_day)+'</div>'+
+      '<div class="metrics">'+
+      '<div class="metric"><span>الرطوبة</span><b>'+Math.round(c.relative_humidity_2m)+'%</b></div>'+
+      '<div class="metric"><span>الرياح</span><b>'+Math.round(c.wind_speed_10m)+' كم/س</b><small>'+DIRS[Math.round(c.wind_direction_10m/45)%8]+'</small></div>'+
+      '<div class="metric"><span>الضغط</span><b>'+Math.round(c.surface_pressure)+' hPa</b></div>'+
+      '<div class="metric"><span>الأشعة فوق البنفسجية</span><b>'+Math.round(uv)+'</b><small>'+uvLevel(uv)+'</small></div>'+
+      '<div class="metric"><span>الشروق</span><b>'+dy.sunrise[0].slice(11,16)+'</b></div>'+
+      '<div class="metric"><span>الغروب</span><b>'+dy.sunset[0].slice(11,16)+'</b></div>'+
+      '</div></section>';
+
+    html += '<section class="card"><h2>الساعات القادمة</h2><div class="hours">';
+    for(var i=i0;i<i0+24 && i<h.time.length;i++){
+      var rp = h.precipitation_probability[i];
+      html += '<div class="hour"><small>'+(i===i0?"الآن":hourLabel(h.time[i]))+'</small>'+icon(h.weather_code[i],h.is_day[i])+
+        '<b>'+t(h.temperature_2m[i])+'</b><span class="rp">'+(rp>=20?rp+"%":"")+'</span></div>';
+    }
+    html += '</div></section>';
+
+    var minT = Math.min.apply(null, dy.temperature_2m_min), maxT = Math.max.apply(null, dy.temperature_2m_max);
+    var span = Math.max(1, maxT-minT);
+    html += '<section class="card"><h2>توقعات 5 أيام</h2>';
+    dy.time.forEach(function(day, i){
+      var dt = new Date(day+"T12:00:00");
+      var name = i===0 ? "اليوم" : dt.toLocaleDateString("ar-u-nu-latn",{weekday:"long"});
+      var sub = dt.toLocaleDateString("ar-u-nu-latn",{day:"numeric",month:"short"});
+      var lo = dy.temperature_2m_min[i], hi = dy.temperature_2m_max[i], rp = dy.precipitation_probability_max[i];
+      var left = ((lo-minT)/span*100).toFixed(1), width = Math.max(8,(hi-lo)/span*100).toFixed(1);
+      html += '<div class="day"><div class="dn"><b>'+name+'</b><small>'+sub+'</small></div>'+icon(dy.weather_code[i],1)+
+        '<span class="rp">'+(rp>=20?rp+"%":"")+'</span><span class="lo">'+t(lo)+'</span>'+
+        '<div class="bar"><i style="inset-inline-start:'+left+'%;width:'+width+'%"></i></div><span class="hi">'+t(hi)+'</span></div>';
+    });
+    html += '</section>';
+    $("#wx").innerHTML = html;
+  }
+
+  setLocation(start.lat, start.lon, start.name || null);
+})();
+</script>
+</body>
+</html>
