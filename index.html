@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>خريطة وطقس</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="خريطة وطقس">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
@@ -157,6 +160,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .cell i.r0{background:var(--line)}.cell i.r1{background:#6fb3e8}.cell i.r2{background:#e8a02d}.cell i.r3{background:#8e44ad}
 .slbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 .legend{font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.legend[hidden]{display:none}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px}
 .legend i.r1{background:#6fb3e8}.legend i.r2{background:#e8a02d}.legend i.r3{background:#8e44ad}
 .mv{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:14px}
@@ -340,6 +344,7 @@ button{font:inherit;color:inherit;cursor:pointer}
         <div class="nvr" id="nvBatRow" hidden><span>🔋</span><b id="nvBat"></b></div>
         <button type="button" id="nvEnd">إنهاء المسار</button>
       </div>
+      <div class="hintbar" id="netBar" hidden></div>
       <div class="hintbar" id="nameHint" hidden></div>
     </div>
     <div class="float wbar" id="wbar" hidden>
@@ -348,6 +353,7 @@ button{font:inherit;color:inherit;cursor:pointer}
         <button type="button" class="cbtn" id="wbPlay">تشغيل</button>
         <input type="range" id="wbRange" min="0" max="0" value="0" step="1" aria-label="الوقت">
       </div>
+      <div class="legend" id="wbLegend" hidden></div>
       <small id="wbNote"></small>
     </div>
     <div class="rsheet" id="rsheet" hidden role="dialog" aria-label="رادار المطر والبرق">
@@ -1168,6 +1174,49 @@ function setPlaceName(n){
     $("#wx").innerHTML = html;
   }
 
+  /* ---------- Offline: service worker + automatic overview cache ---------- */
+  var netBar = $("#netBar"), netTimer = null;
+  function netMsg(t, ms){
+    netBar.textContent = t; netBar.hidden = !t;
+    clearTimeout(netTimer);
+    if(t && ms) netTimer = setTimeout(function(){ if(navigator.onLine!==false) netBar.hidden = true; }, ms);
+  }
+  function offlineState(){
+    if(navigator.onLine===false) netMsg("بدون إنترنت: الخريطة المحفوظة وموقعك يعملان، والطقس والبحث غير متاحين.");
+    else netMsg("", 0);
+  }
+  window.addEventListener("online", function(){ netMsg("عاد الاتصال بالإنترنت.", 3000); });
+  window.addEventListener("offline", offlineState);
+  function tileList(layer, zmin, zmax){
+    var W = 34.5, E = 56.0, S = 16.0, N = 32.5, urls = [];
+    function tx(lon, z){ return Math.floor((lon+180)/360*Math.pow(2,z)); }
+    function ty(lat, z){ var r = lat*Math.PI/180; return Math.floor((1 - Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z)); }
+    for(var z=zmin; z<=zmax; z++){
+      var x0 = tx(W,z), x1 = tx(E,z), y0 = ty(N,z), y1 = ty(S,z);
+      for(var x=x0;x<=x1;x++) for(var y=y0;y<=y1;y++) urls.push(layer.getTileUrl({x:x, y:y, z:z}));
+    }
+    return urls;
+  }
+  if("serviceWorker" in navigator && location.protocol==="https:"){
+    navigator.serviceWorker.register("sw.js").catch(function(){});
+    navigator.serviceWorker.addEventListener("message", function(e){
+      var d = e.data || {};
+      if(d.type==="precache-progress"){
+        if(d.done>=d.total){ store.set("pre_"+current, "1"); netMsg("تم تجهيز خريطة السعودية للعمل دون إنترنت.", 5000); }
+        else netMsg("جارٍ تجهيز الخريطة للعمل دون إنترنت… " + Math.round(d.done/d.total*100) + "%");
+      }
+    });
+    navigator.serviceWorker.ready.then(function(reg){
+      setTimeout(function(){
+        if(navigator.onLine===false || !reg.active) return;
+        var key = current;
+        if(store.get("pre_"+key)) return;
+        reg.active.postMessage({type:"precache", urls:tileList(LAYERS[key].layer, 3, 8)});
+      }, 4000);
+    });
+  }
+  offlineState();
+
   /* ---------- Weather sheet (icon + panel) ---------- */
   var appEl = $(".app"), panelEl = $("#panel"), wxBtn = $("#wxBtn");
   function setWx(open){
@@ -1262,6 +1311,12 @@ function setPlaceName(n){
     chipCloud.setAttribute("aria-pressed", String(name==="clouds"));
     chipStorm.setAttribute("aria-pressed", String(name==="storms"));
     $("#wbar").hidden = !name;
+    var lg = $("#wbLegend");
+    if(isCl(name)){
+      lg.hidden = false;
+      lg.innerHTML = "قوة العاصفة ⚡: " + ["ضعيفة","متوسطة","قوية","شديدة"].map(function(t,i){ return '<i style="background:'+STC[i][0]+';border:1px solid '+STC[i][1]+'"></i>'+t; }).join(" ") +
+        " · المطر: " + ["خفيف","معتدل","غزير","شديد"].map(function(t,i){ return '<i style="background:'+RNC[i]+'"></i>'+t; }).join(" ");
+    } else lg.hidden = true;
     $("#wbRange").value = 0; $("#wbRange").max = 0;
     if(name==="radar") loadRadar();
     else if(isCl(name)){ cloud.group.addTo(map); loadClouds(); }
@@ -1311,17 +1366,21 @@ function setPlaceName(n){
       var rg = $("#wbRange"); rg.min = 0; rg.max = cloud.times.length-1;
       if(+rg.value > +rg.max) rg.value = 0;
       showClouds(+rg.value);
-      setNote(wxLayer==="storms" ? "⚡ = عاصفة رعدية محتملة، والغيمة الزرقاء = مطر. السهم يبيّن اتجاه حركتها، والرقم كمية المطر بالملم. تقدير من النموذج وليس رصدًا للبرق." : "رمادي: غيوم، أزرق: مطر، ⚡ عاصفة رعدية محتملة. السهم يبيّن اتجاه حركة الغيمة (رياح 700 hPa)، والرقم كمية المطر بالملم.");
+      setNote(wxLayer==="storms" ? "⚡ = عاصفة رعدية محتملة، وكلما غمق اللون كانت أقوى. الغيمة الزرقاء = مطر وتغمق مع غزارته. السهم يبيّن اتجاه حركتها، والرقم كمية المطر بالملم. تقدير من النموذج وليس رصدًا للبرق." : "رمادي: غيوم، أزرق: مطر، ⚡ عاصفة رعدية محتملة. السهم يبيّن اتجاه حركة الغيمة (رياح 700 hPa)، والرقم كمية المطر بالملم.");
     }).catch(function(){ if(seq===cloud.seq && isCl(wxLayer)) setNote("تعذر تحميل اتجاه السحب الآن."); });
   }
+  var STC = [["#ffe14d","#e0a800"],["#ff9f1c","#c2410c"],["#e5321f","#7f1d1d"],["#6d0f1c","#2e070d"]];
+  var RNC = ["#9cc6ee","#6aa6dc","#2f6db0","#1a3f78"];
+  function rainLvl(pr){ return pr<0.5 ? 0 : pr<2 ? 1 : pr<5 ? 2 : 3; }
+  function stormLvl(cp, pr){ var sc = cp/1000 + pr/2; return sc<1.5 ? 0 : sc<2.5 ? 1 : sc<4 ? 2 : 3; }
   var CCOL = {cd:"#e3e9ee", cl:"#a9b8c6", rn:"#6aa6dc", st:"#8a5bab"};
-  function cloudHtml(kind, size, to, pr, dim){
+  function cloudHtml(kind, size, to, pr, dim, lvl){
     var extra = "";
     if(kind==="rn" || kind==="st") extra += '<path d="M22 47l-2 6M32 47l-2 6M42 47l-2 6" stroke="#2f7fcf" stroke-width="2.6" stroke-linecap="round"/>';
     if(kind==="st") extra = '<path d="M35 30l-10 14h8l-4 11 14-16h-8z" fill="#ffd400" stroke="#4b1e6b" stroke-width="1" stroke-linejoin="round"/>';
-    var C = CCOL[kind];
+    var C = kind==="rn" ? RNC[rainLvl(pr)] : CCOL[kind];
     if(kind==="st"){
-      var bolt = '<svg class="cld" viewBox="0 0 64 56" aria-hidden="true"><path d="M39 1L13 32h16l-6 23 29-35H35z" fill="#ffd60a" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round"/></svg>';
+      var bolt = '<svg class="cld" viewBox="0 0 64 56" aria-hidden="true"><path d="M39 1L13 32h16l-6 23 29-35H35z" fill="'+STC[lvl][0]+'" stroke="'+STC[lvl][1]+'" stroke-width="2.5" stroke-linejoin="round"/></svg>';
       var dir2 = '<span class="dirw" style="transform:rotate('+to+'deg)">'+arrowSvg(0,20).replace('<svg ','<svg style="color:#111" ')+'</span>';
       return '<span class="cl bolt" style="width:'+size+'px;--r:'+Math.round(size/2)+'px">'+bolt+dir2+(pr>=0.1 ? '<i class="pm">'+pr.toFixed(1)+'</i>' : '')+'</span>';
     }
@@ -1340,9 +1399,9 @@ function setPlaceName(n){
       var kind = isSt ? "st" : pr>=0.1 ? "rn" : cc>=60 ? "cl" : "cd";
       if(storms){ if(kind!=="st" && kind!=="rn") return; }
       else if(cc<25 && pr<0.1) return;
-      var size = Math.round(34 + cc/100*14 + Math.min(pr,5)*3 + (isSt ? 14 : 0));
+      var size = Math.round(34 + cc/100*14 + Math.min(pr,5)*3 + (isSt ? 10 + stormLvl(cp,pr)*4 : 0));
       var to = (wd+180)%360, w = size, hh = Math.round(size*56/64);
-      L.marker(p.ll, {icon:L.divIcon({className:"arwwrap", html:cloudHtml(kind, size, to, pr, storms && kind==="rn"), iconSize:[w,hh], iconAnchor:[w/2,hh/2]}), interactive:false, keyboard:false}).addTo(cloud.group);
+      L.marker(p.ll, {icon:L.divIcon({className:"arwwrap", html:cloudHtml(kind, size, to, pr, storms && kind==="rn", stormLvl(cp, pr)), iconSize:[w,hh], iconAnchor:[w/2,hh/2]}), interactive:false, keyboard:false}).addTo(cloud.group);
     });
     if(storms && !cloud.group.getLayers().length) setNote("لا توجد عواصف رعدية أو أمطار متوقعة في هذه المنطقة في هذا الوقت. جرّب تحريك شريط الزمن.");
     var dt = new Date(cloud.times[i] + "Z");
