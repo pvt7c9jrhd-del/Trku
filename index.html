@@ -138,6 +138,12 @@ button{font:inherit;color:inherit;cursor:pointer}
 .wrow input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
 .wbar small{color:var(--muted);font-size:12px;line-height:1.4}
 .arwwrap{background:none;border:0;pointer-events:none}
+.cl{position:relative;display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
+.cl>svg.cld{display:block;width:100%;height:auto;overflow:visible}
+.cl .dirw{position:absolute;left:50%;top:50%;width:0;height:0}
+.cl .dirw svg{position:absolute;width:20px;height:20px;left:-10px;top:calc(var(--r)*-1 - 18px)}
+.cl.dim{opacity:.6}
+.cl .pm{top:84%}
 .arw{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
 .arw.k-cd{color:#8fa3b3}.arw.k-cl{color:#5b6f80}.arw.k-rn{color:#1d6fbf}.arw.k-st{color:#8e44ad}
 .pm{position:absolute;left:50%;top:100%;transform:translateX(-50%);font:700 10px var(--font);font-style:normal;color:#1d6fbf;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff;white-space:nowrap}
@@ -1215,7 +1221,7 @@ function setPlaceName(n){
       mv+
       cl("منخفضة", h.cloud_cover_low[i0])+cl("متوسطة", h.cloud_cover_mid[i0])+cl("عالية", h.cloud_cover_high[i0])+
       '<p class="note">التقدير مبني على نموذج Open-Meteo (الطاقة الحملية CAPE واحتمال الأمطار). لمشاهدة توقعات البرق والأمطار وحركتها على الخريطة استخدم الأزرار التالية.</p>'+
-      '<div class="mrow" style="margin-top:10px"><button type="button" class="cbtn" data-wx="radar">رادار المطر على الخريطة</button><button type="button" class="cbtn" data-wx="clouds">حركة السحب على الخريطة</button></div>'+
+      '<div class="mrow" style="margin-top:10px"><button type="button" class="cbtn" data-wx="radar">رادار المطر على الخريطة</button><button type="button" class="cbtn" data-wx="clouds">حركة السحب على الخريطة</button><button type="button" class="cbtn" data-wx="storms">العواصف الرعدية على الخريطة</button></div>'+
       '<div class="mrow" style="margin-top:8px"><button type="button" class="cbtn" data-wx="windy-thunder">توقعات الرعد والبرق</button><button type="button" class="cbtn" data-wx="windy-rain">توقعات الأمطار</button><button type="button" class="cbtn" data-wx="windy-radar">الرادار</button></div>'+
       '</section>';
   }
@@ -1230,10 +1236,11 @@ function setPlaceName(n){
     b.addEventListener("click", function(){ setWxLayer(key); });
     chipsEl.appendChild(b); return b;
   }
-  var chipRadar = mkChip("رادار المطر","radar"), chipCloud = mkChip("حركة السحب","clouds");
+  var chipRadar = mkChip("رادار المطر","radar"), chipCloud = mkChip("حركة السحب","clouds"), chipStorm = mkChip("العواصف الرعدية","storms");
+  function isCl(n){ return n==="clouds" || n==="storms"; }
   function setNote(m){ $("#wbNote").textContent = m || ""; }
   function stopPlay(){ clearInterval(wTimer); wTimer = null; $("#wbPlay").textContent = "تشغيل"; }
-  function onRange(v){ if(wxLayer==="radar") showRadar(v); else if(wxLayer==="clouds") showClouds(v); }
+  function onRange(v){ if(wxLayer==="radar") showRadar(v); else if(isCl(wxLayer)) showClouds(v); }
   function startPlay(ms){
     stopPlay(); $("#wbPlay").textContent = "إيقاف";
     wTimer = setInterval(function(){
@@ -1253,10 +1260,11 @@ function setPlaceName(n){
     wxLayer = name;
     chipRadar.setAttribute("aria-pressed", String(name==="radar"));
     chipCloud.setAttribute("aria-pressed", String(name==="clouds"));
+    chipStorm.setAttribute("aria-pressed", String(name==="storms"));
     $("#wbar").hidden = !name;
     $("#wbRange").value = 0; $("#wbRange").max = 0;
     if(name==="radar") loadRadar();
-    else if(name==="clouds"){ cloud.group.addTo(map); loadClouds(); }
+    else if(isCl(name)){ cloud.group.addTo(map); loadClouds(); }
   }
 
   function loadRadar(){
@@ -1283,9 +1291,9 @@ function setPlaceName(n){
 
   function loadClouds(){
     var seq = ++cloud.seq;
-    $("#wbTitle").textContent = "حركة السحب"; $("#wbTime").textContent = "";
+    $("#wbTitle").textContent = wxLayer==="storms" ? "العواصف الرعدية واتجاهها" : "السحب واتجاهها"; $("#wbTime").textContent = "";
     if(map.getZoom() < 5){ cloud.group.clearLayers(); setNote("قرّب الخريطة قليلًا لعرض اتجاه السحب."); return; }
-    var b = map.getBounds(), cols = 5, rows = 4, lats = [], lons = [], pts = [];
+    var b = map.getBounds(), cols = 7, rows = 6, lats = [], lons = [], pts = [];
     for(var r=0;r<rows;r++) for(var c=0;c<cols;c++){
       var la = b.getSouth() + (r+.5)/rows*(b.getNorth()-b.getSouth());
       var lo = b.getWest() + (c+.5)/cols*(b.getEast()-b.getWest());
@@ -1296,33 +1304,47 @@ function setPlaceName(n){
     var url = "https://api.open-meteo.com/v1/forecast?latitude="+lats.join(",")+"&longitude="+lons.join(",")+
       "&hourly=precipitation,cloud_cover,cape,wind_speed_700hPa,wind_direction_700hPa&forecast_hours=25&timezone=GMT&wind_speed_unit=kmh";
     fetch(url).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }).then(function(j){
-      if(seq!==cloud.seq || wxLayer!=="clouds") return;
+      if(seq!==cloud.seq || !isCl(wxLayer)) return;
       var arr = Array.isArray(j) ? j : [j];
       cloud.pts = arr.map(function(o,i){ return {ll:pts[i], h:o.hourly}; });
       cloud.times = arr[0].hourly.time;
       var rg = $("#wbRange"); rg.min = 0; rg.max = cloud.times.length-1;
       if(+rg.value > +rg.max) rg.value = 0;
       showClouds(+rg.value);
-      setNote("الأسهم تشير إلى اتجاه حركة السحب (رياح 700 hPa). أزرق: أمطار، بنفسجي: احتمال عاصفة رعدية، رمادي: غيوم. الرقم تحت السهم هو المطر بالملم.");
-    }).catch(function(){ if(seq===cloud.seq && wxLayer==="clouds") setNote("تعذر تحميل اتجاه السحب الآن."); });
+      setNote(wxLayer==="storms" ? "الغيمة البنفسجية مع الصاعقة = عاصفة رعدية محتملة، والزرقاء = مطر. السهم يبيّن اتجاه حركتها، والرقم كمية المطر بالملم. تقدير من النموذج وليس رصدًا للبرق." : "رمادي: غيوم، أزرق: مطر، بنفسجي مع صاعقة: عاصفة رعدية محتملة. السهم يبيّن اتجاه حركة الغيمة (رياح 700 hPa)، والرقم كمية المطر بالملم.");
+    }).catch(function(){ if(seq===cloud.seq && isCl(wxLayer)) setNote("تعذر تحميل اتجاه السحب الآن."); });
+  }
+  var CCOL = {cd:"#d5dde4", cl:"#93a6b6", rn:"#5b9bd5", st:"#7d4a9e"};
+  function cloudHtml(kind, size, to, pr, dim){
+    var extra = "";
+    if(kind==="rn" || kind==="st") extra += '<path d="M22 42l-2 7M32 42l-2 7M42 42l-2 7" stroke="#1d6fbf" stroke-width="3" stroke-linecap="round"/>';
+    if(kind==="st") extra = '<path d="M35 26l-10 14h8l-4 12 14-17h-8z" fill="#ffd400" stroke="#4b1e6b" stroke-width="1.6" stroke-linejoin="round"/>';
+    var svg = '<svg class="cld" viewBox="0 0 64 56" aria-hidden="true"><path d="M17 36a11 11 0 0 1-1-21.9A15 15 0 0 1 44 12a13 13 0 0 1 3 24z" fill="'+CCOL[kind]+'" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/>'+extra+'</svg>';
+    var dir = '<span class="dirw" style="transform:rotate('+to+'deg)">'+arrowSvg(0,20).replace('<svg ','<svg style="color:#111" ')+'</span>';
+    return '<span class="cl'+(dim?' dim':'')+'" style="width:'+size+'px;--r:'+Math.round(size/2)+'px">'+svg+dir+(pr>=0.1 ? '<i class="pm">'+pr.toFixed(1)+'</i>' : '')+'</span>';
   }
   function showClouds(i){
     cloud.group.clearLayers();
+    var storms = wxLayer==="storms";
     cloud.pts.forEach(function(p){
       var h = p.h, wd = h.wind_direction_700hPa[i], ws = h.wind_speed_700hPa[i];
       if(wd==null || ws==null) return;
       var pr = h.precipitation[i] || 0, cp = h.cape[i] || 0, cc = h.cloud_cover[i] || 0;
-      var to = (wd+180)%360, size = Math.round(20 + Math.min(ws,80)/80*16);
-      var kind = (pr>=0.5 && cp>=800) ? "st" : pr>=0.1 ? "rn" : cc>=60 ? "cl" : "cd";
-      var html = '<span class="arw k-'+kind+'" style="width:'+size+'px;height:'+size+'px">'+arrowSvg(to,size)+'</span>'+(pr>=0.1 ? '<i class="pm">'+pr.toFixed(1)+'</i>' : '');
-      L.marker(p.ll, {icon:L.divIcon({className:"arwwrap", html:html, iconSize:[size,size], iconAnchor:[size/2,size/2]}), interactive:false, keyboard:false}).addTo(cloud.group);
+      var isSt = (cp>=1000 && pr>=0.1) || (cp>=500 && pr>=1) || (cp>=1500 && cc>=60);
+      var kind = isSt ? "st" : pr>=0.1 ? "rn" : cc>=60 ? "cl" : "cd";
+      if(storms){ if(kind!=="st" && kind!=="rn") return; }
+      else if(cc<25 && pr<0.1) return;
+      var size = Math.round(34 + cc/100*14 + Math.min(pr,5)*3 + (isSt ? 8 : 0));
+      var to = (wd+180)%360, w = size, hh = Math.round(size*56/64);
+      L.marker(p.ll, {icon:L.divIcon({className:"arwwrap", html:cloudHtml(kind, size, to, pr, storms && kind==="rn"), iconSize:[w,hh], iconAnchor:[w/2,hh/2]}), interactive:false, keyboard:false}).addTo(cloud.group);
     });
+    if(storms && !cloud.group.getLayers().length) setNote("لا توجد عواصف رعدية أو أمطار متوقعة في هذه المنطقة في هذا الوقت. جرّب تحريك شريط الزمن.");
     var dt = new Date(cloud.times[i] + "Z");
     $("#wbTime").textContent = dt.toLocaleTimeString("ar-u-nu-latn",{hour:"numeric",minute:"2-digit"}) + (i===0 ? " · الآن" : " · بعد "+i+" س");
   }
   map.on("moveend", function(){
     clearTimeout(cloud.timer);
-    cloud.timer = setTimeout(function(){ if(wxLayer==="clouds") loadClouds(); }, 800);
+    cloud.timer = setTimeout(function(){ if(isCl(wxLayer)) loadClouds(); }, 800);
   });
   $("#wx").addEventListener("click", function(e){
     var b = e.target.closest("[data-wx]"); if(!b) return;
