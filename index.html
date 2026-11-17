@@ -355,7 +355,7 @@ button{font:inherit;color:inherit;cursor:pointer}
         <button type="button" class="rclose" id="rclose" aria-label="إغلاق">×</button>
       </div>
       <iframe class="rframe" id="rframe" title="خرائط الطقس" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allow="geolocation"></iframe>
-      <div class="rfoot"><span id="rnote">التوقعات والرادار من Windy.com. حرّك شريط الزمن بالأسفل لمعرفة أين ومتى وبأي اتجاه تتحرك السحب والعواصف.</span><a id="rlink" target="_blank" rel="noopener">فتح في Windy</a></div>
+      <div class="rfoot"><span id="rnote">التوقعات والرادار من Windy.com. حرّك شريط الزمن بالأسفل لمعرفة أين ومتى وبأي اتجاه تتحرك السحب والعواصف.</span></div>
     </div>
     <div class="float navbot" id="navbot" hidden></div>
     <div class="float tools">
@@ -793,7 +793,6 @@ function setPlaceName(n){
     var q = "lat="+lat.toFixed(3)+"&lon="+lon.toFixed(3)+"&detailLat="+lat.toFixed(3)+"&detailLon="+lon.toFixed(3)+
       "&zoom="+z+"&level=surface&overlay="+rOv+"&product=ecmwf&menu=&message=true&marker=true&calendar=now&type=map&location=coordinates&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1";
     rframe.src = "https://embed.windy.com/embed2.html?" + q;
-    $("#rlink").href = "https://www.windy.com/"+lat.toFixed(3)+"/"+lon.toFixed(3)+"?"+rOv+","+lat.toFixed(3)+","+lon.toFixed(3)+","+z;
     Array.prototype.forEach.call(rtabs.children, function(b){ b.setAttribute("aria-pressed", String(b.dataset.ov===rOv)); });
   }
   function openRadar(ov){ if(ov) rOv = ov; rsheet.hidden = false; loadRadarFrame(); }
