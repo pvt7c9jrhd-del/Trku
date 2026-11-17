@@ -452,7 +452,9 @@ button{font:inherit;color:inherit;cursor:pointer}
     store.set("loc", JSON.stringify({lat:lat,lon:lon,name:name||""}));
     loadWeather(lat, lon, token);
     if(opts.self) hideCompass(); else if(opts.cmp){ var tl = L.latLng(lat,lon); showCompass(tl); navTo(tl); }
-    if(!name){
+    if(!name && navigator.onLine===false){
+      setPlaceName("موقع برّي (بدون إنترنت)");
+    } else if(!name){
       reverseName(lat, lon).then(function(n){
         if(token!==wxToken) return;
         n = n || "موقع محدد على الخريطة";
@@ -880,7 +882,7 @@ function setPlaceName(n){
     var seq = ++nav.seq, t = nav.target, from = me;
     nav.lastRe = Date.now();
     var url = "https://router.project-osrm.org/route/v1/driving/"+from.lng.toFixed(6)+","+from.lat.toFixed(6)+";"+t.lng.toFixed(6)+","+t.lat.toFixed(6)+"?overview=full&geometries=geojson&steps=true";
-    fetch(url).then(function(r){ return r.json(); }).then(function(j){
+    (navigator.onLine===false ? Promise.reject(new Error("offline")) : fetch(url).then(function(r){ return r.json(); })).then(function(j){
       if(seq!==nav.seq || !nav.on) return;
       if(j.code!=="Ok" || !j.routes || !j.routes.length) throw new Error(j.code);
       var r = j.routes[0];
@@ -1109,6 +1111,11 @@ function setPlaceName(n){
 
   function loadWeather(lat, lon, token){
     var box = $("#wx");
+    if(navigator.onLine===false){
+      $("#wxBtnTemp").textContent = "--";
+      box.innerHTML = '<div class="state">لا يوجد إنترنت، والطقس يحتاج اتصالًا.<br>الخريطة المحفوظة والإحداثيات والاتجاه والمسافة تعمل بدونه.</div>';
+      return;
+    }
     $("#wxBtnTemp").textContent = "…";
     box.innerHTML = '<div class="state">جارٍ تحميل التوقعات…</div>';
     var url = "https://api.open-meteo.com/v1/forecast?latitude="+lat.toFixed(4)+"&longitude="+lon.toFixed(4)+
