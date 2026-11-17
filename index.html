@@ -76,6 +76,21 @@ button{font:inherit;color:inherit;cursor:pointer}
 .pin{display:block;width:22px;height:22px;border-radius:50% 50% 50% 0;background:var(--accent);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);transform:rotate(-45deg)}
 .mpt{display:block;width:16px;height:16px;box-sizing:border-box;background:#fff;border:3px solid #e8890c;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.45)}
 
+/* coordinate search panel */
+.coordbtn{flex:none;border:1px solid var(--line);background:var(--surface2);border-radius:8px;padding:3px 10px;font-size:13px;font-weight:600}
+.coordbtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.coordpanel{position:absolute;inset-inline:0;top:54px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:12px;display:flex;flex-direction:column;gap:10px}
+.coordpanel[hidden]{display:none}
+.clabel{font-size:12px;color:var(--muted);margin-bottom:4px}
+.crow{display:flex;align-items:center;gap:6px;direction:ltr}
+.hem{flex:none;width:42px;height:42px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);font:700 17px var(--font)}
+.cin{flex:1 1 0;min-width:0;width:100%;height:42px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);color:var(--ink);font:600 16px var(--font);padding:0 6px;text-align:center;direction:ltr}
+.csep{color:var(--muted);font-weight:700;font-size:18px}
+.cbtn{border:1px solid var(--line);background:var(--surface2);border-radius:8px;padding:5px 10px;font-size:13px}
+.cgo{flex:1;height:42px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:700 15px var(--font)}
+.cmsg{color:#c0392b;font-size:12px}
+.cmsg:empty{display:none}
+
 /* terrain names overlay: wadis, peaks, valleys, localities */
 .hintbar{align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:4px 12px;font-size:13px}
 .hintbar[hidden]{display:none}
@@ -163,9 +178,24 @@ button{font:inherit;color:inherit;cursor:pointer}
       <div class="search">
         <form id="searchForm" autocomplete="off" role="search">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-          <input id="q" type="search" placeholder="ابحث عن مدينة أو شارع أو معلم" aria-label="بحث عن مكان" enterkeyhint="search">
+          <input id="q" type="search" placeholder="ابحث عن مكان" aria-label="بحث عن مكان" enterkeyhint="search">
+          <button type="button" class="coordbtn" id="coordBtn" aria-pressed="false" aria-controls="coordPanel">إحداثيات</button>
         </form>
         <div class="results" id="results" hidden></div>
+        <div class="coordpanel" id="coordPanel" hidden>
+          <div class="mrow" id="coordFmt">
+            <button type="button" class="cbtn seg" data-fmt="dd" aria-pressed="true">درجات عشرية</button>
+            <button type="button" class="cbtn seg" data-fmt="dm" aria-pressed="false">درجات ودقائق</button>
+            <button type="button" class="cbtn seg" data-fmt="dms" aria-pressed="false">درجات ودقائق وثوانٍ</button>
+          </div>
+          <div><div class="clabel">خط العرض</div><div class="crow" id="latRow"></div></div>
+          <div><div class="clabel">خط الطول</div><div class="crow" id="lonRow"></div></div>
+          <small class="cmsg" id="coordMsg"></small>
+          <div class="mrow">
+            <button type="button" class="cgo" id="coordGo">اذهب إلى الموقع</button>
+            <button type="button" class="cbtn" id="coordHere">الموقع المحدد</button>
+          </div>
+        </div>
       </div>
       <div class="chips" id="layers" role="group" aria-label="نوع الخريطة"></div>
       <div class="measure-bar" id="measureBar" hidden>
@@ -365,6 +395,114 @@ button{font:inherit;color:inherit;cursor:pointer}
   });
   document.addEventListener("click", function(e){ if(!e.target.closest(".search")) hideResults(); });
   qEl.addEventListener("keydown", function(e){ if(e.key==="Escape") hideResults(); });
+
+  /* ---------- Coordinate search panel (fixed N/S and E/W fields) ---------- */
+  var cPanel = $("#coordPanel"), cBtn = $("#coordBtn"), cMsg = $("#coordMsg");
+  var cFmt = "dd", cRows = {};
+  var AX = {
+    lat:{pos:"N", neg:"S", max:90,  row:"#latRow", name:"خط العرض"},
+    lon:{pos:"E", neg:"W", max:180, row:"#lonRow", name:"خط الطول"}
+  };
+  var PH = {
+    lat:{dd:["24.71360"], dm:["24","42.816"], dms:["24","42","48.9"]},
+    lon:{dd:["46.67530"], dm:["46","40.518"], dms:["46","40","31.1"]}
+  };
+  function normNum(str){
+    return String(str).replace(/[٠-٩]/g,function(d){ return "٠١٢٣٤٥٦٧٨٩".indexOf(d); }).replace(/[٫,،]/g,".").replace(/[^\d.\-]/g,"").trim();
+  }
+  function buildRows(){
+    Object.keys(AX).forEach(function(k){
+      var a = AX[k], row = $(a.row), r = {neg:cRows[k]?cRows[k].neg:false, f:{}};
+      row.innerHTML = "";
+      var hem = document.createElement("button"); hem.type = "button"; hem.className = "hem";
+      r.hem = hem;
+      r.setHem = function(){ hem.textContent = r.neg ? a.neg : a.pos; hem.setAttribute("aria-label", a.name+" "+hem.textContent); };
+      hem.addEventListener("click", function(){ r.neg = !r.neg; r.setHem(); });
+      r.setHem();
+      row.appendChild(hem);
+      var keys = cFmt==="dd" ? ["d"] : cFmt==="dm" ? ["d","m"] : ["d","m","s"];
+      var seps = {d:"°", m:"′", s:"″"};
+      keys.forEach(function(key, i){
+        var inp = document.createElement("input");
+        inp.className = "cin"; inp.type = "text"; inp.inputMode = "decimal";
+        inp.setAttribute("autocomplete","off");
+        inp.placeholder = PH[k][cFmt][i];
+        inp.setAttribute("aria-label", a.name+" "+({d:"درجات",m:"دقائق",s:"ثوانٍ"})[key]);
+        inp.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); goCoords(); } });
+        if(k==="lat" && key==="d"){
+          inp.addEventListener("paste", function(){
+            setTimeout(function(){
+              var c = parseCoords(inp.value);
+              if(c){ fillAxis("lat",c[0]); fillAxis("lon",c[1]); }
+            }, 0);
+          });
+        }
+        row.appendChild(inp); r.f[key] = inp;
+        var sep = document.createElement("span"); sep.className = "csep"; sep.textContent = seps[key];
+        row.appendChild(sep);
+      });
+      cRows[k] = r;
+    });
+  }
+  function fillAxis(k, v){
+    var r = cRows[k], abs = Math.abs(v);
+    r.neg = v < 0; r.setHem();
+    if(cFmt==="dd"){ r.f.d.value = abs.toFixed(5); }
+    else if(cFmt==="dm"){
+      var tm = Math.round(abs*60*1000)/1000, d = Math.floor(tm/60);
+      r.f.d.value = d; r.f.m.value = (tm-d*60).toFixed(3);
+    } else {
+      var ts = Math.round(abs*3600*10)/10, d2 = Math.floor(ts/3600), rem = ts-d2*3600, m2 = Math.floor(rem/60);
+      r.f.d.value = d2; r.f.m.value = m2; r.f.s.value = (rem-m2*60).toFixed(1);
+    }
+  }
+  function readAxis(k){
+    var r = cRows[k], a = AX[k];
+    var dTxt = normNum(r.f.d.value);
+    if(dTxt==="" || dTxt==="-" || dTxt===".") return {err:"أدخل "+a.name};
+    var d = parseFloat(dTxt);
+    var m = r.f.m ? parseFloat(normNum(r.f.m.value)||"0") : 0;
+    var s = r.f.s ? parseFloat(normNum(r.f.s.value)||"0") : 0;
+    if(!isFinite(d) || !isFinite(m) || !isFinite(s)) return {err:"قيمة غير صحيحة في "+a.name};
+    if(m<0 || m>=60 || s<0 || s>=60) return {err:"الدقائق والثواني يجب أن تكون أقل من 60"};
+    var v = Math.abs(d) + m/60 + s/3600;
+    if(v > a.max) return {err:a.name+" يجب ألا يتجاوز "+a.max+"°"};
+    var sign = (r.neg ? -1 : 1) * (d < 0 ? -1 : 1);
+    return {v: sign*v};
+  }
+  function goCoords(){
+    var la = readAxis("lat"); if(la.err){ cMsg.textContent = la.err; return; }
+    var lo = readAxis("lon"); if(lo.err){ cMsg.textContent = lo.err; return; }
+    cMsg.textContent = "";
+    closeCoord();
+    map.flyTo([la.v, lo.v], 14, {duration:.8});
+    setLocation(la.v, lo.v, null);
+  }
+  function openCoord(){
+    hideResults();
+    if(!cRows.lat) buildRows();
+    cPanel.hidden = false; cBtn.setAttribute("aria-pressed","true"); cMsg.textContent = "";
+    if(!cRows.lat.f.d.value && curLat!==null){ fillAxis("lat",curLat); fillAxis("lon",curLon); }
+  }
+  function closeCoord(){ cPanel.hidden = true; cBtn.setAttribute("aria-pressed","false"); }
+  cBtn.addEventListener("click", function(){ if(cPanel.hidden) openCoord(); else closeCoord(); });
+  $("#coordGo").addEventListener("click", goCoords);
+  $("#coordHere").addEventListener("click", function(){
+    if(curLat===null) return;
+    fillAxis("lat",curLat); fillAxis("lon",curLon); cMsg.textContent = "";
+  });
+  $("#coordFmt").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-fmt]"); if(!b) return;
+    var la = cRows.lat ? readAxis("lat") : {}, lo = cRows.lon ? readAxis("lon") : {};
+    cFmt = b.dataset.fmt;
+    this.querySelectorAll("button").forEach(function(x){ x.setAttribute("aria-pressed", String(x===b)); });
+    buildRows();
+    if(la.v!==undefined && lo.v!==undefined){ fillAxis("lat",la.v); fillAxis("lon",lo.v); }
+    cMsg.textContent = "";
+  });
+  qEl.addEventListener("focus", closeCoord);
+  document.addEventListener("click", function(e){ if(!e.target.closest(".search")) closeCoord(); });
+  document.addEventListener("keydown", function(e){ if(e.key==="Escape") closeCoord(); });
 
   /* ---------- My location ---------- */
   var accCircle = null;
