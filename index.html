@@ -79,6 +79,19 @@ button{font:inherit;color:inherit;cursor:pointer}
 .pin{display:block;width:22px;height:22px;border-radius:50% 50% 50% 0;background:var(--accent);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);transform:rotate(-45deg)}
 .mpt{display:block;width:16px;height:16px;box-sizing:border-box;background:#fff;border:3px solid #e8890c;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.45)}
 
+/* navigation (OsmAnd style) */
+.navinfo{align-self:flex-start;display:flex;flex-direction:column;background:rgba(10,10,12,.88);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:12px;overflow:hidden;min-width:118px;box-shadow:var(--shadow)}
+.navinfo[hidden],.nvr[hidden],.navtop[hidden],.navbot[hidden],.fab[hidden]{display:none}
+.nvr{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.14);font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.nvr span{font-size:16px}
+.navinfo button{border:0;background:#7a1f1f;color:#fff;font-size:12px;padding:6px}
+.navtop{order:-1;align-self:stretch;display:flex;align-items:center;gap:14px;background:#000;color:#fff;border-radius:12px;padding:8px 14px;box-shadow:var(--shadow)}
+.navtop .navarr{color:#ffd400;flex:none;display:flex}
+.navtop b{display:block;font-size:24px;line-height:1.1;font-variant-numeric:tabular-nums}
+.navtop #nvTxt{font-size:16px}
+.navtop small{display:block;font-size:12px;opacity:.7}
+.navbot{left:50%;transform:translateX(-50%);bottom:34px;background:#fff;color:#111;border:2px solid #222;border-radius:999px;padding:2px 14px;font-weight:700;font-size:14px;max-width:60vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.navarw{background:none;border:0;pointer-events:none;color:#111}
 /* compass bearing card */
 .cmp{align-self:flex-start;display:flex;gap:12px;align-items:center;max-width:min(360px,100%);background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:10px 12px;position:relative}
 .cmp[hidden]{display:none}
@@ -234,7 +247,7 @@ button{font:inherit;color:inherit;cursor:pointer}
       <button type="button" class="pclose" id="wxClose" aria-label="إغلاق الطقس">×</button>
     </div>
     <div id="wx"><div class="state">جارٍ تحميل التوقعات…</div></div>
-    <p class="foot">بيانات الخرائط © مساهمو <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>، وهي نفس قاعدة البيانات التي يعتمد عليها OsmAnd. توقعات الطقس من <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>. البحث عبر Nominatim، وأسماء الأودية عبر Overpass، وطرق السيارات عبر OSRM، والرادار من RainViewer.</p>
+    <p class="foot">بيانات الخرائط © مساهمو <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>، وهي نفس قاعدة البيانات التي يعتمد عليها OsmAnd. توقعات الطقس من <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>. البحث عبر Nominatim، وأسماء الأودية عبر Overpass، وطرق السيارات عبر OSRM، والرادار من RainViewer، والتوجيه عبر OSRM.</p>
   </main>
 
   <section class="mapwrap" aria-label="الخريطة">
@@ -277,6 +290,10 @@ button{font:inherit;color:inherit;cursor:pointer}
         <div class="brg" id="measureBrg"></div>
         <small id="measureMsg">اضغط على الخريطة لإضافة نقاط المسار، واسحب أي نقطة لتعديلها.</small>
       </div>
+      <div class="navtop" id="navtop" hidden>
+        <span class="navarr" id="nvArr"></span>
+        <div><b id="nvDistN"></b><span id="nvTxt"></span><small id="nvSub"></small></div>
+      </div>
       <div class="cmp" id="cmp" hidden>
         <button type="button" class="x" id="cmpX" aria-label="إغلاق البوصلة">×</button>
         <svg class="dial" id="dial" viewBox="-50 -50 100 100" aria-hidden="true">
@@ -294,6 +311,16 @@ button{font:inherit;color:inherit;cursor:pointer}
           <div class="acts"><button type="button" id="cmpMe">موقعي</button><button type="button" id="cmpLive" aria-pressed="false">بوصلة الجهاز</button></div>
         </div>
       </div>
+      <div class="navinfo" id="navinfo" hidden>
+        <div class="nvr"><span>🏁</span><b id="nvDist">--</b></div>
+        <div class="nvr"><span>🕒</span><b id="nvEta">--</b></div>
+        <div class="nvr"><span>🚗</span><b id="nvSpd">--</b></div>
+        <div class="nvr"><span>⛰</span><b id="nvAlt">--</b></div>
+        <div class="nvr"><span>🧭</span><b id="nvBrg">--</b></div>
+        <div class="nvr"><span>⏱</span><b id="nvRem">--</b></div>
+        <div class="nvr" id="nvBatRow" hidden><span>🔋</span><b id="nvBat"></b></div>
+        <button type="button" id="nvEnd">إنهاء المسار</button>
+      </div>
       <div class="hintbar" id="nameHint" hidden></div>
     </div>
     <div class="float wbar" id="wbar" hidden>
@@ -304,10 +331,14 @@ button{font:inherit;color:inherit;cursor:pointer}
       </div>
       <small id="wbNote"></small>
     </div>
+    <div class="float navbot" id="navbot" hidden></div>
     <div class="float tools">
       <button class="fab wfab" id="wxBtn" aria-pressed="false" aria-controls="panel" aria-label="الطقس" title="الطقس">
         <span id="wxBtnIcon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M13 36h21a8 8 0 0 0 1.2-15.9A10.5 10.5 0 0 0 15 19.5 8.3 8.3 0 0 0 13 36z" fill="#9db0c2"/></svg></span>
         <b id="wxBtnTemp">--</b>
+      </button>
+      <button class="fab" id="followBtn" hidden aria-pressed="false" aria-label="تتبّع موقعي" title="تتبّع موقعي">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l8 19-8-5-8 5z"/></svg>
       </button>
       <button class="fab" id="measureBtn" aria-pressed="false" aria-label="قياس المسافة" title="قياس المسافة">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></svg>
@@ -384,7 +415,7 @@ button{font:inherit;color:inherit;cursor:pointer}
     setPlaceName(name || "");
     store.set("loc", JSON.stringify({lat:lat,lon:lon,name:name||""}));
     loadWeather(lat, lon, token);
-    if(opts.self) hideCompass(); else if(opts.cmp) showCompass(L.latLng(lat,lon));
+    if(opts.self) hideCompass(); else if(opts.cmp){ var tl = L.latLng(lat,lon); showCompass(tl); navTo(tl); }
     if(!name){
       reverseName(lat, lon).then(function(n){
         if(token!==wxToken) return;
@@ -634,10 +665,15 @@ function setPlaceName(n){
   function brgTxt(deg){ var d = Math.round(deg)%360; return d+"° "+dirName(deg); }
   var me = null, meMarker = null, cmpTarget = null, heading = null, liveOn = false, cmpLine = null;
   var cmpEl = $("#cmp");
+  function meIcon(){
+    var h = nav.hdg!=null ? nav.hdg : (liveOn && heading!=null ? heading : null);
+    if(!nav.on || h==null) return L.divIcon({className:"youdot", html:"<i></i>", iconSize:[16,16], iconAnchor:[8,8]});
+    return L.divIcon({className:"youdot", html:'<svg viewBox="0 0 24 24" width="34" height="34" style="transform:rotate('+h+'deg)"><path d="M12 2l8 19-8-5-8 5z" fill="#1a73e8" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>', iconSize:[34,34], iconAnchor:[17,17]});
+  }
   function setMeMarker(){
     if(!me) return;
-    if(meMarker) meMarker.setLatLng(me);
-    else meMarker = L.marker(me, {icon:L.divIcon({className:"youdot", html:"<i></i>", iconSize:[16,16], iconAnchor:[8,8]}), interactive:false, keyboard:false}).addTo(map);
+    if(meMarker){ meMarker.setLatLng(me); meMarker.setIcon(meIcon()); }
+    else meMarker = L.marker(me, {icon:meIcon(), interactive:false, keyboard:false}).addTo(map);
   }
   function showCompass(target){ cmpTarget = target; cmpEl.hidden = false; updateCompass(); }
   function hideCompass(){
@@ -656,6 +692,7 @@ function setPlaceName(n){
       if(cmpLine){ map.removeLayer(cmpLine); cmpLine = null; }
       return;
     }
+    if(nav.on){ cmpEl.hidden = true; if(cmpLine){ map.removeLayer(cmpLine); cmpLine = null; } return; }
     var b = bearing(me, cmpTarget), d = map.distance(me, cmpTarget);
     $("#cmpFrom").textContent = "من موقعك إلى " + (name && name!=="جارٍ تحديد الموقع…" ? name : "الوجهة");
     $("#cmpBrg").textContent = brgTxt(b);
@@ -665,7 +702,7 @@ function setPlaceName(n){
     if(cmpLine) cmpLine.setLatLngs([me, cmpTarget]);
     else cmpLine = L.polyline([me, cmpTarget], {color:"#e8890c", weight:3, dashArray:"8 8", opacity:.9, interactive:false}).addTo(map);
   }
-  var lastB = 0;
+  var lastB = 0, lastIco = 0;
   function setDial(b, has){
     lastB = b;
     $("#dialPtr").setAttribute("transform", "rotate("+b+")");
@@ -679,6 +716,7 @@ function setPlaceName(n){
     navigator.geolocation.getCurrentPosition(function(p){
       btn.textContent = "موقعي";
       me = L.latLng(p.coords.latitude, p.coords.longitude); setMeMarker(); updateCompass(); redraw();
+      if(cmpTarget) navTo(cmpTarget);
     }, function(){
       btn.textContent = "موقعي";
       alert("تعذر الحصول على موقعك. اسمح للموقع باستخدام خدمة الموقع ثم أعد المحاولة.");
@@ -689,6 +727,7 @@ function setPlaceName(n){
     if(h==null && e.alpha!=null && (e.absolute || e.type==="deviceorientationabsolute")) h = (360 - e.alpha) % 360;
     if(h==null) return;
     heading = h; setDial(lastB, !!(me && cmpTarget));
+    if(nav.on && nav.hdg==null && Date.now()-lastIco>400){ lastIco = Date.now(); setMeMarker(); }
   }
   function stopLive(){
     liveOn = false; heading = null;
@@ -709,6 +748,173 @@ function setPlaceName(n){
       DO.requestPermission().then(function(r){ if(r==="granted") startLive(); else alert("لم يتم السماح باستخدام حساس الاتجاه."); }).catch(function(){ alert("تعذر تشغيل البوصلة."); });
     } else startLive();
   });
+
+  /* ---------- Navigation: route to the selected point + side info ---------- */
+  var nav = {on:false, target:null, geo:null, cum:[], total:0, dur:0, steps:[], p:0, straight:false, line:null, casing:null, tail:null, arrows:L.layerGroup().addTo(map), follow:false, watch:null, speed:null, alt:null, hdg:null, seq:0, lastRe:0};
+  var navEl = $("#navinfo"), navTopEl = $("#navtop"), navBotEl = $("#navbot"), followBtn = $("#followBtn");
+  var MODT = {"left":"يسارًا","right":"يمينًا","slight left":"قليلًا يسارًا","slight right":"قليلًا يمينًا","sharp left":"بحدة يسارًا","sharp right":"بحدة يمينًا"};
+  var MODD = {"straight":0,"slight right":45,"right":90,"sharp right":135,"uturn":180,"sharp left":225,"left":270,"slight left":315};
+  function stepText(s){
+    var m = s.m || {}, ty = m.type, mod = m.modifier, nm = s.name ? " إلى " + s.name : "";
+    if(ty==="arrive") return "وصلت إلى وجهتك";
+    if(ty==="depart") return "ابدأ بالتحرك" + (s.name ? " على " + s.name : "");
+    if(ty==="roundabout" || ty==="rotary" || ty==="roundabout turn" || ty==="exit roundabout" || ty==="exit rotary") return "ادخل الدوار واخرج من المخرج " + (m.exit || 1);
+    if(mod==="uturn") return "استدر للخلف";
+    if(!mod || mod==="straight") return "استمر للأمام" + nm;
+    if(ty==="fork") return "ابقَ " + (mod.indexOf("left")>=0 ? "يسارًا" : "يمينًا");
+    if(ty==="merge") return "ادمج " + MODT[mod];
+    return "انعطف " + MODT[mod] + nm;
+  }
+  function nearIdx(ll, arr){
+    var best = 0, bd = 1e18, k = Math.cos(ll.lat*Math.PI/180);
+    for(var i=0;i<arr.length;i++){
+      var dy = arr[i].lat-ll.lat, dx = (arr[i].lng-ll.lng)*k, d = dy*dy+dx*dx;
+      if(d<bd){ bd = d; best = i; }
+    }
+    return best;
+  }
+  function clearNavLayers(){
+    [nav.line, nav.casing, nav.tail].forEach(function(l){ if(l) map.removeLayer(l); });
+    nav.line = nav.casing = nav.tail = null; nav.arrows.clearLayers();
+  }
+  function setFollow(v){
+    nav.follow = v; followBtn.setAttribute("aria-pressed", String(v));
+    if(v && me) map.setView(me, Math.max(map.getZoom(), 16));
+  }
+  function navEnd(){
+    nav.on = false; nav.target = null; nav.seq++; nav.geo = null; nav.steps = [];
+    clearNavLayers();
+    if(nav.watch!=null && navigator.geolocation){ navigator.geolocation.clearWatch(nav.watch); }
+    nav.watch = null; nav.hdg = null; nav.follow = false;
+    followBtn.hidden = true; followBtn.setAttribute("aria-pressed","false");
+    navEl.hidden = navTopEl.hidden = navBotEl.hidden = true;
+    if(meMarker) setMeMarker();
+  }
+  function startWatch(){
+    if(nav.watch!=null || !navigator.geolocation) return;
+    nav.watch = navigator.geolocation.watchPosition(function(p){
+      var c = p.coords; me = L.latLng(c.latitude, c.longitude);
+      nav.speed = (c.speed!=null && !isNaN(c.speed)) ? c.speed*3.6 : null;
+      nav.alt = (c.altitude!=null && !isNaN(c.altitude)) ? c.altitude : null;
+      if(c.heading!=null && !isNaN(c.heading) && (c.speed||0) > 1) nav.hdg = c.heading;
+      setMeMarker(); navProgress(true);
+      if(nav.follow) map.panTo(me, {animate:true, duration:.5});
+    }, function(){}, {enableHighAccuracy:true, maximumAge:2000, timeout:20000});
+  }
+  function navTo(target){
+    navEnd(); nav.target = target;
+    function go(){
+      if(nav.target!==target) return;
+      nav.on = true; cmpEl.hidden = true;
+      if(cmpLine){ map.removeLayer(cmpLine); cmpLine = null; }
+      followBtn.hidden = false; navEl.hidden = false; navTopEl.hidden = false;
+      startWatch(); navRoute();
+    }
+    if(me) go();
+    else if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(function(p){
+        me = L.latLng(p.coords.latitude, p.coords.longitude); setMeMarker(); go();
+      }, function(){}, {enableHighAccuracy:true, timeout:12000});
+    }
+  }
+  function navRoute(){
+    var seq = ++nav.seq, t = nav.target, from = me;
+    nav.lastRe = Date.now();
+    var url = "https://router.project-osrm.org/route/v1/driving/"+from.lng.toFixed(6)+","+from.lat.toFixed(6)+";"+t.lng.toFixed(6)+","+t.lat.toFixed(6)+"?overview=full&geometries=geojson&steps=true";
+    fetch(url).then(function(r){ return r.json(); }).then(function(j){
+      if(seq!==nav.seq || !nav.on) return;
+      if(j.code!=="Ok" || !j.routes || !j.routes.length) throw new Error(j.code);
+      var r = j.routes[0];
+      nav.geo = r.geometry.coordinates.map(function(c){ return L.latLng(c[1], c[0]); });
+      nav.cum = [0];
+      for(var i=1;i<nav.geo.length;i++) nav.cum[i] = nav.cum[i-1] + map.distance(nav.geo[i-1], nav.geo[i]);
+      nav.total = nav.cum[nav.cum.length-1] || 1; nav.dur = r.duration; nav.straight = false;
+      nav.steps = ((r.legs[0] && r.legs[0].steps) || []).map(function(s){
+        return {m:s.maneuver, name:s.name, idx:nearIdx(L.latLng(s.maneuver.location[1], s.maneuver.location[0]), nav.geo)};
+      });
+      drawNav();
+    }).catch(function(){
+      if(seq!==nav.seq || !nav.on) return;
+      var d = map.distance(from, t);
+      nav.geo = [from, t]; nav.cum = [0, d]; nav.total = d || 1; nav.dur = d/11; nav.steps = []; nav.straight = true;
+      drawNav();
+    });
+  }
+  function drawNav(){
+    clearNavLayers();
+    var pts = nav.geo;
+    nav.casing = L.polyline(pts, {color:"#111", weight:11, opacity:.5, interactive:false, dashArray:nav.straight ? "1 14" : null, lineCap:"round"}).addTo(map);
+    nav.line = L.polyline(pts, {color:"#ffdd33", weight:7, opacity:1, interactive:false, dashArray:nav.straight ? "1 14" : null, lineCap:"round", lineJoin:"round"}).addTo(map);
+    if(!nav.straight && map.distance(pts[pts.length-1], nav.target) > 100){
+      nav.tail = L.polyline([pts[pts.length-1], nav.target], {color:"#e8890c", weight:4, dashArray:"6 8", interactive:false}).addTo(map);
+    }
+    drawArrows();
+    if(!nav.follow) map.fitBounds(L.latLngBounds(pts.concat([me, nav.target])), {padding:[70,70], maxZoom:16});
+    navProgress(false);
+  }
+  function drawArrows(){
+    nav.arrows.clearLayers();
+    if(!nav.on || nav.straight || !nav.geo) return;
+    var mpp = 40075016.686*Math.cos(map.getCenter().lat*Math.PI/180)/(256*Math.pow(2, map.getZoom()));
+    var gap = Math.max(mpp*70, nav.total/80), next = gap/2;
+    for(var i=1;i<nav.geo.length;i++){
+      if(nav.cum[i] >= next){
+        var bg = bearing(nav.geo[i-1], nav.geo[i]);
+        L.marker(nav.geo[i], {icon:L.divIcon({className:"navarw", html:arrowSvg(bg,14), iconSize:[14,14], iconAnchor:[7,7]}), interactive:false, keyboard:false}).addTo(nav.arrows);
+        next += gap;
+      }
+    }
+  }
+  function pad2(n){ return (n<10 ? "0" : "") + n; }
+  function navProgress(live){
+    if(!nav.on || !nav.geo || !me) return;
+    var t = nav.target, rem, best = 0;
+    if(nav.straight){
+      rem = map.distance(me, t); nav.geo[0] = me;
+      nav.line.setLatLngs([me, t]); nav.casing.setLatLngs([me, t]);
+    } else {
+      best = nearIdx(me, nav.geo); nav.p = best;
+      rem = Math.max(0, nav.total - nav.cum[best]);
+      if(live && map.distance(me, nav.geo[best]) > 120 && Date.now()-nav.lastRe > 15000) navRoute();
+    }
+    var remT = nav.straight ? rem/11 : nav.dur*(rem/nav.total);
+    var b = bearing(me, t);
+    $("#nvDist").textContent = fmtDist(rem);
+    $("#nvEta").textContent = new Date(Date.now()+remT*1000).toLocaleTimeString("ar-u-nu-latn", {hour:"numeric", minute:"2-digit"});
+    $("#nvSpd").textContent = nav.speed!=null ? Math.round(nav.speed)+" كم/س" : "—";
+    $("#nvAlt").textContent = nav.alt!=null ? Math.round(nav.alt)+" م" : "—";
+    $("#nvBrg").textContent = Math.round(b)+"°";
+    $("#nvRem").textContent = pad2(Math.floor(remT/3600))+":"+pad2(Math.floor(remT%3600/60));
+    var arrow, dist, txt, sub = "", road = "";
+    if(rem < 30){ arrow = 0; dist = ""; txt = "وصلت إلى وجهتك"; }
+    else if(nav.straight){
+      var rel = (b - (nav.hdg!=null ? nav.hdg : (liveOn && heading!=null ? heading : 0)) + 360) % 360;
+      arrow = rel; dist = fmtDist(rem); txt = "اتجه "+dirName(b)+" "+Math.round(b)+"°"; sub = "لا يوجد طريق معروف، اتبع الاتجاه";
+    } else {
+      var st = null, cur = null;
+      for(var k=0;k<nav.steps.length;k++){ if(nav.steps[k].idx <= best) cur = nav.steps[k]; }
+      for(var k2=1;k2<nav.steps.length;k2++){ if(nav.steps[k2].idx > best){ st = nav.steps[k2]; break; } }
+      if(!st) st = nav.steps[nav.steps.length-1];
+      if(st){
+        arrow = MODD[(st.m && st.m.modifier) || "straight"] || 0;
+        dist = fmtDist(Math.max(0, nav.cum[st.idx] - nav.cum[best])); txt = stepText(st);
+      } else { arrow = 0; dist = fmtDist(rem); txt = "استمر للأمام"; }
+      road = cur && cur.name ? cur.name : "";
+    }
+    $("#nvArr").innerHTML = arrowSvg(arrow, 44);
+    $("#nvDistN").textContent = dist; $("#nvTxt").textContent = txt; $("#nvSub").textContent = sub;
+    navBotEl.hidden = !road; navBotEl.textContent = road;
+  }
+  $("#nvEnd").addEventListener("click", function(){ navEnd(); hideCompass(); });
+  followBtn.addEventListener("click", function(){ setFollow(!nav.follow); });
+  map.on("dragstart", function(){ if(nav.follow){ nav.follow = false; followBtn.setAttribute("aria-pressed","false"); } });
+  map.on("zoomend", drawArrows);
+  if(navigator.getBattery){
+    navigator.getBattery().then(function(bt){
+      var u = function(){ $("#nvBat").textContent = Math.round(bt.level*100)+"%"; };
+      $("#nvBatRow").hidden = false; u(); bt.addEventListener("levelchange", u);
+    }).catch(function(){});
+  }
 
   /* ---------- Route planner: straight line (desert) or car route (OSRM) ---------- */
   var planning = false, mode = "line", wpts = [], routeGeo = null, routeInfo = null, rSeq = 0;
