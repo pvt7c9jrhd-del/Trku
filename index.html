@@ -59,7 +59,13 @@ button{font:inherit;color:inherit;cursor:pointer}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;box-shadow:var(--shadow);font-weight:500;font-size:14px}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.measure-bar{display:flex;align-items:center;gap:10px;align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px 8px 6px 12px;font-weight:500}
+.measure-bar{display:flex;flex-direction:column;gap:6px;align-self:flex-start;max-width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:8px 10px;font-weight:500}
+.mrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mtime{color:var(--muted)}
+.measure-bar small{color:var(--muted);font-weight:400;font-size:12px}
+.measure-bar small:empty{display:none}
+.seg[aria-pressed="true"]{background:var(--accent)!important;color:var(--accent-ink);border-color:var(--accent)!important}
+.linkbtn{border:0;background:none;color:var(--accent);font:inherit;padding:0 6px;text-decoration:underline}
 .measure-bar[hidden]{display:none}
 .measure-bar button{border:1px solid var(--line);background:var(--surface2);border-radius:8px;padding:2px 10px;font-size:13px}
 .tools{inset-inline-end:12px;bottom:34px;display:flex;flex-direction:column;gap:10px}
@@ -68,7 +74,7 @@ button{font:inherit;color:inherit;cursor:pointer}
 .leaflet-top.leaflet-left{top:112px}
 .leaflet-container{font-family:var(--font)}
 .pin{display:block;width:22px;height:22px;border-radius:50% 50% 50% 0;background:var(--accent);border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);transform:rotate(-45deg)}
-.mpt{background:#fff;border:3px solid var(--accent);border-radius:50%}
+.mpt{display:block;width:16px;height:16px;box-sizing:border-box;background:#fff;border:3px solid #e8890c;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.45)}
 
 /* terrain names overlay: wadis, peaks, valleys, localities */
 .hintbar{align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:4px 12px;font-size:13px}
@@ -145,10 +151,10 @@ button{font:inherit;color:inherit;cursor:pointer}
   <main class="panel" id="panel">
     <div class="place">
       <h1 id="placeName">جارٍ التحميل…</h1>
-      <p id="placeCoords">&nbsp;</p>
+      <p><span id="placeCoords">&nbsp;</span><button type="button" class="linkbtn" id="copyCoords">نسخ الإحداثيات</button></p>
     </div>
     <div id="wx"><div class="state">جارٍ تحميل التوقعات…</div></div>
-    <p class="foot">بيانات الخرائط © مساهمو <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>، وهي نفس قاعدة البيانات التي يعتمد عليها OsmAnd. توقعات الطقس من <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>. البحث عبر Nominatim.</p>
+    <p class="foot">بيانات الخرائط © مساهمو <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>، وهي نفس قاعدة البيانات التي يعتمد عليها OsmAnd. توقعات الطقس من <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>. البحث عبر Nominatim، وأسماء الأودية عبر Overpass، وطرق السيارات عبر OSRM.</p>
   </main>
 
   <section class="mapwrap" aria-label="الخريطة">
@@ -163,9 +169,17 @@ button{font:inherit;color:inherit;cursor:pointer}
       </div>
       <div class="chips" id="layers" role="group" aria-label="نوع الخريطة"></div>
       <div class="measure-bar" id="measureBar" hidden>
-        <span>المسافة: <b id="measureVal">0</b></span>
-        <button type="button" id="measureUndo">تراجع</button>
-        <button type="button" id="measureClear">مسح</button>
+        <div class="mrow"><span>المسافة: <b id="measureVal">0</b></span><span class="mtime" id="measureTime"></span></div>
+        <div class="mrow">
+          <button type="button" class="seg" id="modeLine" aria-pressed="true">خط مستقيم</button>
+          <button type="button" class="seg" id="modeCar" aria-pressed="false">طريق سيارة</button>
+        </div>
+        <div class="mrow">
+          <button type="button" id="measureUndo">تراجع</button>
+          <button type="button" id="measureClear">مسح</button>
+          <button type="button" id="measureGpx">تصدير GPX</button>
+        </div>
+        <small id="measureMsg">اضغط على الخريطة لإضافة نقاط المسار، واسحب أي نقطة لتعديلها.</small>
       </div>
       <div class="hintbar" id="nameHint" hidden></div>
     </div>
@@ -229,7 +243,7 @@ button{font:inherit;color:inherit;cursor:pointer}
   map.on("zoomend", function(){ store.set("zoom", map.getZoom()); });
 
   /* ---------- Location + place name ---------- */
-  var marker = null, wxToken = 0;
+  var marker = null, wxToken = 0, curLat = null, curLon = null;
   var pinIcon = L.divIcon({className:"",html:'<span class="pin"></span>',iconSize:[22,22],iconAnchor:[11,22]});
 
   function fmtCoord(lat,lon){
@@ -239,6 +253,7 @@ button{font:inherit;color:inherit;cursor:pointer}
     opts = opts || {};
     if(marker) marker.setLatLng([lat,lon]); else marker = L.marker([lat,lon],{icon:pinIcon,keyboard:false}).addTo(map);
     if(opts.fly) map.flyTo([lat,lon], opts.zoom||Math.max(map.getZoom(),12), {duration:.8});
+    curLat = lat; curLon = lon;
     $("#placeCoords").textContent = fmtCoord(lat,lon);
     var token = ++wxToken;
     $("#placeName").textContent = name || "جارٍ تحديد الموقع…";
@@ -264,11 +279,52 @@ button{font:inherit;color:inherit;cursor:pointer}
     }).catch(function(){return ""});
   }
 
+  /* ---------- Coordinates parsing ---------- */
+  function parseCoords(s){
+    s = String(s).replace(/[٠-٩]/g,function(d){ return "٠١٢٣٤٥٦٧٨٩".indexOf(d); }).replace(/[،؛]/g,",").replace(/٫/g,".").trim();
+    function fin(a,b){
+      if(!isFinite(a)||!isFinite(b)) return null;
+      if(Math.abs(a)>90 && Math.abs(b)<=90){ var t=a; a=b; b=t; }
+      return (Math.abs(a)<=90 && Math.abs(b)<=180) ? [a,b] : null;
+    }
+    var m = s.match(/^([-+]?\d+(?:\.\d+)?)\s*°?\s*([NSns])?\s*[,;\s]\s*([-+]?\d+(?:\.\d+)?)\s*°?\s*([EWew])?$/);
+    if(m){
+      var a = parseFloat(m[1]), b = parseFloat(m[3]);
+      if(m[2] && /s/i.test(m[2])) a = -Math.abs(a);
+      if(m[4] && /w/i.test(m[4])) b = -Math.abs(b);
+      return fin(a,b);
+    }
+    var re = /(\d+(?:\.\d+)?)\s*°\s*(?:(\d+(?:\.\d+)?)\s*['′’]\s*)?(?:(\d+(?:\.\d+)?)\s*(?:["″”]|'')\s*)?([NSEWnsew])/g, v = [], x;
+    while((x = re.exec(s))){
+      var val = parseFloat(x[1]) + (x[2]?parseFloat(x[2])/60:0) + (x[3]?parseFloat(x[3])/3600:0);
+      if(/[SsWw]/.test(x[4])) val = -val;
+      v.push({val:val, hem:x[4].toUpperCase()});
+    }
+    if(v.length===2){
+      var la = v.filter(function(o){ return o.hem==="N"||o.hem==="S"; })[0];
+      var lo = v.filter(function(o){ return o.hem==="E"||o.hem==="W"; })[0];
+      if(la && lo) return fin(la.val, lo.val);
+    }
+    return null;
+  }
+
   /* ---------- Search ---------- */
   var qEl = $("#q"), resEl = $("#results"), timer = null, searchSeq = 0, lastHits = [];
   function hideResults(){ resEl.hidden = true; }
   function runSearch(){
     var q = qEl.value.trim();
+    var c = parseCoords(q);
+    if(c){
+      lastHits = [{coord:true, lat:c[0], lon:c[1]}];
+      resEl.innerHTML = "";
+      var cb = document.createElement("button"); cb.type = "button";
+      var ct = document.createElement("b"); ct.textContent = "الانتقال إلى الإحداثيات";
+      var cs = document.createElement("small"); cs.textContent = c[0].toFixed(5)+", "+c[1].toFixed(5);
+      cb.appendChild(ct); cb.appendChild(cs);
+      cb.addEventListener("click", function(){ pick(lastHits[0]); });
+      resEl.appendChild(cb); resEl.hidden = false;
+      return;
+    }
     if(q.length<2){ hideResults(); return; }
     var seq = ++searchSeq;
     var url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&addressdetails=0&accept-language=ar&q="+encodeURIComponent(q);
@@ -293,9 +349,10 @@ button{font:inherit;color:inherit;cursor:pointer}
   }
   function pick(h){
     var lat = +h.lat, lon = +h.lon;
-    var name = h.display_name.split(",").slice(0,2).map(function(s){return s.trim()}).join("، ");
+    var name = h.coord ? null : h.display_name.split(",").slice(0,2).map(function(s){return s.trim()}).join("، ");
     hideResults(); qEl.blur();
-    if(h.boundingbox){
+    if(h.coord){ map.flyTo([lat,lon],14,{duration:.8}); }
+    else if(h.boundingbox){
       var bb = h.boundingbox.map(Number);
       map.flyToBounds([[bb[0],bb[2]],[bb[1],bb[3]]],{maxZoom:15,duration:.8});
     } else { map.flyTo([lat,lon],13,{duration:.8}); }
@@ -323,29 +380,92 @@ button{font:inherit;color:inherit;cursor:pointer}
     }, {enableHighAccuracy:true, timeout:12000});
   });
 
-  /* ---------- Measure distance ---------- */
-  var measuring = false, pts = [], mLine = L.polyline([], {color:"#e8890c",weight:4,opacity:.9}), mDots = L.layerGroup();
-  var mBtn = $("#measureBtn"), mBar = $("#measureBar");
+  /* ---------- Route planner: straight line (desert) or car route (OSRM) ---------- */
+  var planning = false, mode = "line", wpts = [], routeGeo = null, routeInfo = null, rSeq = 0;
+  var mLine = L.polyline([], {color:"#e8890c",weight:5,opacity:.9}), mMarkers = L.layerGroup();
+  var mBtn = $("#measureBtn"), mBar = $("#measureBar"), mMsg = $("#measureMsg");
+  var HELP = "اضغط على الخريطة لإضافة نقاط المسار، واسحب أي نقطة لتعديلها.";
   function fmtDist(m){ return m<1000 ? Math.round(m)+" م" : (m/1000).toFixed(m<10000?2:1)+" كم"; }
-  function updateMeasure(){
-    mLine.setLatLngs(pts);
-    var total = 0; for(var i=1;i<pts.length;i++) total += map.distance(pts[i-1],pts[i]);
-    $("#measureVal").textContent = fmtDist(total);
-    mDots.clearLayers();
-    pts.forEach(function(p){ L.circleMarker(p,{radius:6,weight:3,color:"#e8890c",fillColor:"#fff",fillOpacity:1}).addTo(mDots); });
+  function fmtTime(sec){ var min = Math.max(1,Math.round(sec/60)); if(min<60) return min+" د"; return Math.floor(min/60)+" س "+(min%60)+" د"; }
+  function lineLength(arr){ var t = 0; for(var i=1;i<arr.length;i++) t += map.distance(arr[i-1],arr[i]); return t; }
+  function redraw(){
+    mLine.setLatLngs(routeGeo || wpts);
+    var dist = routeInfo ? routeInfo.distance : lineLength(wpts);
+    $("#measureVal").textContent = fmtDist(dist);
+    $("#measureTime").textContent = routeInfo ? "· "+fmtTime(routeInfo.duration) : "";
+    mMarkers.clearLayers();
+    wpts.forEach(function(p,i){
+      var mk = L.marker(p, {draggable:true, icon:L.divIcon({className:"", html:'<span class="mpt"></span>', iconSize:[16,16], iconAnchor:[8,8]})}).addTo(mMarkers);
+      mk.on("dragend", function(){ wpts[i] = mk.getLatLng(); route(); });
+    });
   }
+  function route(){
+    routeGeo = null; routeInfo = null;
+    var token = ++rSeq;
+    mMsg.textContent = wpts.length ? "" : HELP;
+    if(mode==="car" && wpts.length>=2){
+      mMsg.textContent = "جارٍ حساب الطريق…";
+      var coords = wpts.map(function(p){ return p.lng.toFixed(6)+","+p.lat.toFixed(6); }).join(";");
+      fetch("https://router.project-osrm.org/route/v1/driving/"+coords+"?overview=full&geometries=geojson")
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if(token!==rSeq) return;
+          if(j.code!=="Ok" || !j.routes || !j.routes.length) throw new Error(j.code);
+          var r0 = j.routes[0];
+          routeGeo = r0.geometry.coordinates.map(function(c){ return L.latLng(c[1],c[0]); });
+          routeInfo = {distance:r0.distance, duration:r0.duration};
+          mMsg.textContent = "المسار يتبع الطرق المعروفة فقط. للمسارات الصحراوية استخدم الخط المستقيم.";
+          redraw();
+        })
+        .catch(function(){
+          if(token!==rSeq) return;
+          mMsg.textContent = "تعذر حساب طريق السيارة، عُرض خط مستقيم بدلًا منه.";
+          redraw();
+        });
+    } else if(mode==="car"){
+      mMsg.textContent = "أضف نقطتين على الأقل لحساب طريق السيارة.";
+    }
+    redraw();
+  }
+  function setMode(m){
+    mode = m;
+    $("#modeLine").setAttribute("aria-pressed", String(m==="line"));
+    $("#modeCar").setAttribute("aria-pressed", String(m==="car"));
+    route();
+  }
+  $("#modeLine").addEventListener("click", function(){ setMode("line"); });
+  $("#modeCar").addEventListener("click", function(){ setMode("car"); });
   mBtn.addEventListener("click", function(){
-    measuring = !measuring;
-    mBtn.setAttribute("aria-pressed", String(measuring));
-    mBar.hidden = !measuring;
-    if(measuring){ mLine.addTo(map); mDots.addTo(map); map.getContainer().style.cursor = "crosshair"; }
+    planning = !planning;
+    mBtn.setAttribute("aria-pressed", String(planning));
+    mBar.hidden = !planning;
+    if(planning){ mLine.addTo(map); mMarkers.addTo(map); map.getContainer().style.cursor = "crosshair"; }
     else { map.getContainer().style.cursor = ""; }
   });
-  $("#measureUndo").addEventListener("click", function(){ pts.pop(); updateMeasure(); });
-  $("#measureClear").addEventListener("click", function(){ pts = []; updateMeasure(); });
+  $("#measureUndo").addEventListener("click", function(){ wpts.pop(); route(); });
+  $("#measureClear").addEventListener("click", function(){ wpts = []; route(); });
+  $("#measureGpx").addEventListener("click", function(){
+    if(!wpts.length){ mMsg.textContent = "أضف نقاطًا أولًا ثم صدّر المسار."; return; }
+    var pts = routeGeo || wpts;
+    var x = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Map Weather" xmlns="http://www.topografix.com/GPX/1/1">\n';
+    wpts.forEach(function(p,i){ x += '<wpt lat="'+p.lat.toFixed(6)+'" lon="'+p.lng.toFixed(6)+'"><name>'+(i+1)+'</name></wpt>\n'; });
+    x += '<trk><name>Route</name><trkseg>\n';
+    pts.forEach(function(p){ x += '<trkpt lat="'+p.lat.toFixed(6)+'" lon="'+p.lng.toFixed(6)+'"/>\n'; });
+    x += '</trkseg></trk>\n</gpx>';
+    var file = null;
+    try{ file = new File([x], "route.gpx", {type:"application/gpx+xml"}); }catch(e){}
+    if(file && navigator.canShare && navigator.canShare({files:[file]})){
+      navigator.share({files:[file], title:"route.gpx"}).catch(function(){});
+      return;
+    }
+    var url = URL.createObjectURL(new Blob([x], {type:"application/gpx+xml"}));
+    var a = document.createElement("a"); a.href = url; a.download = "route.gpx";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  });
 
   map.on("click", function(e){
-    if(measuring){ pts.push(e.latlng); updateMeasure(); return; }
+    if(planning){ wpts.push(e.latlng); route(); return; }
     setLocation(e.latlng.lat, e.latlng.lng, null);
   });
 
@@ -447,6 +567,15 @@ button{font:inherit;color:inherit;cursor:pointer}
     html += '</section>';
     $("#wx").innerHTML = html;
   }
+
+  /* ---------- Copy coordinates ---------- */
+  $("#copyCoords").addEventListener("click", function(){
+    if(curLat===null) return;
+    var btn = this, txt = curLat.toFixed(6)+", "+curLon.toFixed(6);
+    function done(ok){ btn.textContent = ok ? "تم النسخ" : txt; setTimeout(function(){ btn.textContent = "نسخ الإحداثيات"; }, ok?1500:5000); }
+    try{ navigator.clipboard.writeText(txt).then(function(){ done(true); }, function(){ done(false); }); }
+    catch(e){ done(false); }
+  });
 
   /* ---------- Names overlay (wadis, peaks, valleys, localities) from OSM via Overpass ---------- */
   var namesOn = store.get("names") !== "0";
