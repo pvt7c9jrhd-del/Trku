@@ -157,6 +157,10 @@ button{font:inherit;color:inherit;cursor:pointer}
 .strip{display:flex;gap:2px;height:48px}
 .cell{flex:1;height:100%;display:flex;align-items:flex-end}
 .cell i{display:block;width:100%;border-radius:2px 2px 0 0}
+.cell i.c0{background:var(--line)}.cell i.c1{background:#a8cdee}.cell i.c2{background:#4a90d9}.cell i.c3{background:#1f5fae}
+.rmv{display:flex;gap:10px;align-items:center;margin:10px 0;font-size:14px}
+.rmv svg{flex:none;color:var(--accent)}
+.rainhead{font-size:15px;font-weight:600;margin:8px 0}
 .cell i.r0{background:var(--line)}.cell i.r1{background:#6fb3e8}.cell i.r2{background:#e8a02d}.cell i.r3{background:#8e44ad}
 .slbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 .legend{font-size:11px;color:var(--muted);margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -1332,6 +1336,7 @@ function setPlaceName(n){
       '<div class="metric"><span>الغروب</span><b>'+dy.sunset[0].slice(11,16)+'</b></div>'+
       '</div></section>';
 
+    html += '<section class="card" id="rainOut"><h2>الأمطار القادمة</h2><div class="state">جارٍ تحليل الأمطار…</div></section>';
     html += stormCard(d, i0);
     html += '<section class="card"><h2>الساعات القادمة</h2><div class="hours">';
     for(var i=i0;i<i0+24 && i<h.time.length;i++){
@@ -1357,6 +1362,7 @@ function setPlaceName(n){
     html += '</section>';
     updateFab(c);
     $("#wx").innerHTML = html;
+    loadRainOutlook(d, i0);
   }
 
   /* ---------- Offline: service worker + automatic overview cache ---------- */
@@ -1401,6 +1407,75 @@ function setPlaceName(n){
     });
   }
   offlineState();
+
+  /* ---------- Rain outlook: multi-model hourly forecast + upwind rain tracking ---------- */
+  var rainSeq = 0, RMOD = ["ecmwf_ifs025","icon_seamless","gfs_seamless"];
+  function destPt(lat, lon, brg, km){
+    var R = 6371, d = km/R, b = brg*Math.PI/180, la = lat*Math.PI/180, lo = lon*Math.PI/180;
+    var la2 = Math.asin(Math.sin(la)*Math.cos(d) + Math.cos(la)*Math.sin(d)*Math.cos(b));
+    var lo2 = lo + Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(la), Math.cos(d) - Math.sin(la)*Math.sin(la2));
+    return [la2*180/Math.PI, ((lo2*180/Math.PI + 540) % 360) - 180];
+  }
+  function rAgg(h, i){
+    var n = 0, sum = 0, cnt = 0;
+    RMOD.forEach(function(m){
+      var a = h["precipitation_"+m], v = a ? a[i] : null;
+      if(v!=null){ cnt++; sum += v; if(v >= 0.1) n++; }
+    });
+    return {mean:cnt ? sum/cnt : 0, n:n, cnt:cnt};
+  }
+  function loadRainOutlook(d, i0){
+    var box = $("#rainOut"); if(!box) return;
+    if(navigator.onLine===false){ box.innerHTML = '<h2>الأمطار القادمة</h2><div class="state">يحتاج اتصالًا بالإنترنت.</div>'; return; }
+    var seq = ++rainSeq, lat = curLat, lon = curLon;
+    var from = d.hourly.wind_direction_700hPa[i0], spd = Math.max(10, d.hourly.wind_speed_700hPa[i0] || 0);
+    var DIST = [25,50,80,120,170], pts = [[lat,lon]];
+    if(from!=null) DIST.forEach(function(k){ pts.push(destPt(lat, lon, from, k)); });
+    var url = "https://api.open-meteo.com/v1/forecast?latitude="+pts.map(function(p){ return p[0].toFixed(3); }).join(",")+
+      "&longitude="+pts.map(function(p){ return p[1].toFixed(3); }).join(",")+
+      "&hourly=precipitation&models="+RMOD.join(",")+"&forecast_hours=13&timezone=auto";
+    fetch(url).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }).then(function(j){
+      if(seq!==rainSeq || !$("#rainOut")) return;
+      var arr = Array.isArray(j) ? j : [j], c0 = arr[0].hourly, n = c0.time.length, cells = "", first = -1, total = 0, maxM = 2;
+      var rows = [];
+      for(var i=0;i<n;i++){ var a = rAgg(c0, i); rows.push(a); total += a.mean; if(a.mean > maxM) maxM = a.mean; }
+      for(var k=0;k<n;k++){
+        var a2 = rows[k], lvl = a2.mean < 0.1 ? 0 : a2.cnt && a2.n/a2.cnt >= 0.99 ? 3 : a2.n/(a2.cnt||1) >= 0.6 ? 2 : 1;
+        if(first < 0 && lvl >= 2) first = k;
+        cells += '<span class="cell" title="'+a2.mean.toFixed(1)+' ملم"><i class="c'+lvl+'" style="height:'+Math.max(6, Math.min(100, a2.mean/maxM*100))+'%"></i></span>';
+      }
+      var head;
+      if(first < 0){
+        var any = rows.some(function(a){ return a.mean >= 0.1; });
+        head = any ? "احتمال ضعيف لأمطار خفيفة متفرقة خلال 12 ساعة." : "لا أمطار متوقعة خلال الـ 12 ساعة القادمة.";
+      } else {
+        var a3 = rows[first];
+        head = first===0 ? "يُتوقع هطول مطر الآن (حوالي "+a3.mean.toFixed(1)+" ملم/س)." : "أقرب مطر متوقع بعد "+first+" ساعة ("+hourLabel(c0.time[first])+") بحوالي "+a3.mean.toFixed(1)+" ملم/س.";
+        head += " اتفاق "+a3.n+" من "+a3.cnt+" نماذج.";
+      }
+      var mv = "";
+      if(from!=null){
+        var to = (from+180)%360, hit = -1, hitRain = 0;
+        for(var q=1;q<arr.length;q++){
+          var up = arr[q].hourly, ag = rAgg(up, 0), ag1 = rAgg(up, 1);
+          var m = Math.max(ag.mean, ag1.mean), nn = Math.max(ag.n, ag1.n);
+          if(m >= 0.2 && nn >= 2){ hit = q-1; hitRain = m; break; }
+        }
+        mv = '<div class="rmv">'+arrowSvg(to,34)+'<div>اتجاه حركة الأمطار نحو <b>'+TO[Math.round(to/45)%8]+'</b> بسرعة ~'+Math.round(spd)+' كم/س.'+
+          (hit>=0 ? '<br><b>مطر يقترب منك:</b> على بعد '+DIST[hit]+' كم من جهة '+TO[Math.round(from/45)%8]+' (حوالي '+hitRain.toFixed(1)+' ملم/س)، وصوله المقدّر خلال ~'+Math.max(1,Math.round(DIST[hit]/spd*10)/10).toString().replace(/\.0$/,"")+' ساعة.'
+               : '<br>لا مطر ظاهر في محيط '+DIST[DIST.length-1]+' كم باتجاه مهب الرياح.')+'</div></div>';
+      }
+      box.innerHTML = '<h2>الأمطار القادمة</h2><p class="rainhead">'+head+'</p>'+
+        '<div class="strip" role="img" aria-label="الأمطار خلال 12 ساعة">'+cells+'</div>'+
+        '<div class="slbl"><span>الآن</span><span>+3 س</span><span>+6 س</span><span>+9 س</span><span>+12 س</span></div>'+
+        '<div class="legend">ارتفاع العمود = كمية المطر · درجة اللون = اتفاق النماذج: <i style="background:#a8cdee"></i>ضعيف <i style="background:#4a90d9"></i>جيد <i style="background:#1f5fae"></i>كامل</div>'+
+        mv+
+        '<p class="note">المجموع المتوقع خلال 12 ساعة: '+total.toFixed(1)+' ملم (متوسط 3 نماذج: ECMWF وICON وGFS). دقة النماذج بين 11 و25 كم، فالمطر المحلي قد يخطئ موقعه. للتأكد اللحظي راجع الرادار. اتجاه الحركة تقدير من رياح 700 hPa.</p>'+
+        '<div class="mrow" style="margin-top:8px"><button type="button" class="cbtn" data-wx="windy-radar">الرادار</button><button type="button" class="cbtn" data-wx="windy-rain">خريطة الأمطار</button><button type="button" class="cbtn" data-wx="storms">العواصف على الخريطة</button></div>';
+    }).catch(function(){
+      if(seq===rainSeq && $("#rainOut")) $("#rainOut").innerHTML = '<h2>الأمطار القادمة</h2><div class="state">تعذر تحليل الأمطار الآن.</div>';
+    });
+  }
 
   /* ---------- Weather sheet (icon + panel) ---------- */
   var appEl = $(".app"), panelEl = $("#panel"), wxBtn = $("#wxBtn");
