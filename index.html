@@ -61,6 +61,27 @@ button{font:inherit;color:inherit;cursor:pointer}
 .results b{display:block;font-weight:600}
 .results small{color:var(--muted)}
 .results .none{padding:12px 14px;color:var(--muted)}
+.spanel{align-self:flex-start;width:min(350px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:10px 12px;display:flex;flex-direction:column;gap:8px;max-height:68dvh;overflow-y:auto}
+.spanel[hidden]{display:none}
+.sh{display:flex;justify-content:space-between;align-items:center}
+.sh .x2{border:0;background:none;font-size:22px;line-height:1;color:var(--muted)}
+.sadd{display:flex;gap:6px}
+.sadd input{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface2);border-radius:10px;padding:7px 10px;font:inherit;font-size:14px}
+.spanel small{color:var(--muted);font-size:12px;line-height:1.5}
+.slist{display:flex;flex-direction:column;gap:6px}
+.sitem{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:12px;padding:6px 8px;background:var(--surface2)}
+.sitem .smain{flex:1;min-width:0;border:0;background:none;text-align:start;font:inherit;padding:0}
+.sitem .smain b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sitem .smain span{display:block;font-size:11px;color:var(--muted);direction:ltr;text-align:start}
+.sitem .sact{border:0;background:none;color:var(--accent);font:inherit;font-size:12px;padding:4px}
+.sitem .sact.del{color:#c0392b}
+.sfoot{display:flex;gap:6px}
+.sfoot button,.sadd .cbtn{border:1px solid var(--line);background:var(--surface2);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px}
+.svpin{background:none;border:0}
+.svpin span{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#f5b301;color:#fff;font-size:13px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
+.sv-low .svtip{display:none}
+.btnrow{align-self:flex-start;display:flex;gap:8px}
+.btnrow .lbtn{align-self:auto}
 .lbtn{align-self:flex-start;display:inline-flex;gap:6px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 14px;box-shadow:var(--shadow);font-weight:600;font-size:14px}
 .lbtn[aria-expanded="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .lpanel{align-self:flex-start;width:min(330px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:10px 12px;display:flex;flex-direction:column;gap:10px;max-height:62dvh;overflow-y:auto}
@@ -287,7 +308,7 @@ button{font:inherit;color:inherit;cursor:pointer}
     <div class="phead">
       <div class="place">
       <h1 id="placeName">جارٍ التحميل…</h1>
-      <p><span id="placeCoords">&nbsp;</span><button type="button" class="linkbtn" id="copyCoords">نسخ الإحداثيات</button></p>
+      <p><span id="placeCoords">&nbsp;</span><button type="button" class="linkbtn" id="copyCoords">نسخ الإحداثيات</button><button type="button" class="linkbtn" id="saveLoc">حفظ الموقع</button></p>
     </div>
       <button type="button" class="pclose" id="wxClose" aria-label="إغلاق الطقس">×</button>
     </div>
@@ -320,9 +341,22 @@ button{font:inherit;color:inherit;cursor:pointer}
           </div>
         </div>
       </div>
+      <div class="btnrow">
       <button type="button" class="lbtn" id="layersBtn" aria-expanded="false" aria-controls="layers">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>الطبقات
       </button>
+      <button type="button" class="lbtn" id="savedBtnTop" aria-expanded="false" aria-controls="spanel">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3 6.5 7 .8-5.2 4.8 1.5 7-6.3-3.6-6.3 3.6 1.5-7L2 9.3l7-.8z"/></svg>مواقعي
+      </button>
+      </div>
+      <div class="spanel" id="spanel" hidden role="dialog" aria-label="المواقع المحفوظة">
+        <div class="sh"><b>مواقعي المحفوظة</b><button type="button" class="x2" id="spClose" aria-label="إغلاق">×</button></div>
+        <div class="sadd"><input id="spName" type="text" maxlength="60" placeholder="اسم الموقع" aria-label="اسم الموقع"><button type="button" class="cbtn" id="spSave">حفظ</button></div>
+        <small id="spCur"></small>
+        <div class="slist" id="spList"></div>
+        <div class="sfoot"><button type="button" id="spExport">نسخة احتياطية</button><button type="button" id="spImport">استيراد</button><input type="file" id="spFile" accept=".json,application/json" hidden></div>
+        <small>تُحفظ في جوالك فقط ولا تُرسل إلى أي جهة. إذا مسحت بيانات Safari ستُحذف، فاحتفظ بنسخة احتياطية.</small>
+      </div>
       <div class="lpanel" id="layers" hidden role="group" aria-label="طبقات الخريطة والطقس"></div>
       <div class="measure-bar" id="measureBar" hidden>
         <div class="mrow"><span>المسافة: <b id="measureVal">0</b></span><span class="mtime" id="measureTime"></span></div>
@@ -557,6 +591,7 @@ function setPlaceName(n){
     var url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&addressdetails=0&accept-language=ar&q="+encodeURIComponent(q);
     fetch(url).then(function(r){return r.json()}).then(function(hits){
       if(seq!==searchSeq) return;
+      hits = localHits(q).concat(hits);
       lastHits = hits; resEl.innerHTML = "";
       if(!hits.length){ resEl.innerHTML = '<div class="none">لا توجد نتائج مطابقة.</div>'; resEl.hidden = false; return; }
       hits.forEach(function(h){
@@ -571,12 +606,25 @@ function setPlaceName(n){
       resEl.hidden = false;
     }).catch(function(){
       if(seq!==searchSeq) return;
+      var lh = localHits(q);
+      if(lh.length){
+        lastHits = lh; resEl.innerHTML = "";
+        lh.forEach(function(h){
+          var b = document.createElement("button"); b.type = "button";
+          var t = document.createElement("b"); t.textContent = "★ " + h.n;
+          var sm = document.createElement("small"); sm.textContent = "موقع محفوظ";
+          b.appendChild(t); b.appendChild(sm);
+          b.addEventListener("click", function(){ pick(h); });
+          resEl.appendChild(b);
+        });
+        resEl.hidden = false; return;
+      }
       resEl.innerHTML = '<div class="none">تعذر البحث الآن. تحقق من الاتصال وحاول مرة أخرى.</div>'; resEl.hidden = false;
     });
   }
   function pick(h){
     var lat = +h.lat, lon = +h.lon;
-    var name = h.coord ? null : h.display_name.split(",").slice(0,2).map(function(s){return s.trim()}).join("، ");
+    var name = h.coord ? null : h.local ? h.n : h.display_name.split(",").slice(0,2).map(function(s){return s.trim()}).join("، ");
     hideResults(); qEl.blur();
     if(h.coord){ map.flyTo([lat,lon],14,{duration:.8}); }
     else if(h.boundingbox){
@@ -2064,6 +2112,122 @@ function setPlaceName(n){
   function paZoom(){ map.getContainer().classList.toggle("pa-low", map.getZoom() < 6); }
   map.on("zoomend", paZoom); paZoom();
 
+/* ---------- Saved places (stored only on this device) ---------- */
+  var places = [];
+  try{ places = JSON.parse(store.get("places") || "[]"); if(!Array.isArray(places)) places = []; }catch(e){ places = []; }
+  var savedLayer = L.layerGroup().addTo(map);
+  var spEl = $("#spanel"), spTop = $("#savedBtnTop"), spList = $("#spList"), spName = $("#spName"), spCur = $("#spCur");
+  function persist(){
+    try{ localStorage.setItem("places", JSON.stringify(places)); return localStorage.getItem("places") !== null; }catch(e){ return false; }
+  }
+  function fmtLL(lat, lon){ return Math.abs(lat).toFixed(5)+"° "+(lat>=0?"N":"S")+"  "+Math.abs(lon).toFixed(5)+"° "+(lon>=0?"E":"W"); }
+  function localHits(q){
+    q = (q || "").trim().toLowerCase(); if(q.length < 2) return [];
+    return places.filter(function(p){ return p.name.toLowerCase().indexOf(q) >= 0; }).slice(0,5).map(function(p){
+      return {local:true, n:p.name, lat:p.lat, lon:p.lon, display_name:p.name+", موقع محفوظ"};
+    });
+  }
+  function goPlace(p){
+    spEl.hidden = true; spTop.setAttribute("aria-expanded","false");
+    map.flyTo([p.lat, p.lon], Math.max(map.getZoom(), 14), {duration:.8});
+    setLocation(p.lat, p.lon, p.name, {cmp:true});
+  }
+  function drawSaved(){
+    savedLayer.clearLayers();
+    places.forEach(function(p){
+      var m = L.marker([p.lat, p.lon], {icon:L.divIcon({className:"svpin", html:"<span>★</span>", iconSize:[22,22], iconAnchor:[11,11]}), keyboard:false});
+      m.bindTooltip(esc(p.name), {permanent:true, direction:"bottom", offset:[0,10], className:"ptip svtip"});
+      m.on("click", function(){ goPlace(p); });
+      m.addTo(savedLayer);
+    });
+  }
+  function renderSaved(){
+    drawSaved();
+    spList.innerHTML = "";
+    if(!places.length){ spList.innerHTML = '<small>لا توجد مواقع محفوظة بعد. حدّد موقعًا على الخريطة أو ابحث عن إحداثية، ثم اكتب اسمًا واضغط «حفظ».</small>'; }
+    places.slice().sort(function(a,b){ return b.t - a.t; }).forEach(function(p){
+      var row = document.createElement("div"); row.className = "sitem";
+      var main = document.createElement("button"); main.type = "button"; main.className = "smain";
+      var nm = document.createElement("b"); nm.textContent = p.name;
+      var cs = document.createElement("span"); cs.textContent = fmtLL(p.lat, p.lon) + (me ? "  ·  " + fmtDist(map.distance(me, [p.lat,p.lon])) : "");
+      main.appendChild(nm); main.appendChild(cs);
+      main.addEventListener("click", function(){ goPlace(p); });
+      var rn = document.createElement("button"); rn.type = "button"; rn.className = "sact"; rn.textContent = "تسمية";
+      rn.addEventListener("click", function(){
+        var v = window.prompt("اسم الموقع", p.name);
+        if(v && v.trim()){ p.name = v.trim().slice(0,60); persist(); renderSaved(); }
+      });
+      var dl = document.createElement("button"); dl.type = "button"; dl.className = "sact del"; dl.textContent = "حذف";
+      dl.addEventListener("click", function(){
+        if(window.confirm("حذف «"+p.name+"»؟")){ places = places.filter(function(x){ return x.id!==p.id; }); persist(); renderSaved(); }
+      });
+      row.appendChild(main); row.appendChild(rn); row.appendChild(dl);
+      spList.appendChild(row);
+    });
+  }
+  function updateCur(){
+    if(curLat===null){ spCur.textContent = "حدّد موقعًا على الخريطة أولًا."; $("#spSave").disabled = true; }
+    else { spCur.textContent = "الموقع المحدد: " + fmtLL(curLat, curLon); $("#spSave").disabled = false; }
+  }
+  function openSaved(prefill){
+    $("#layers").hidden = true; $("#layersBtn").setAttribute("aria-expanded","false");
+    spEl.hidden = false; spTop.setAttribute("aria-expanded","true");
+    updateCur(); renderSaved();
+    if(prefill){
+      var nmv = $("#placeName").textContent;
+      spName.value = (nmv && nmv.indexOf("جارٍ")<0 && nmv.indexOf("موقع محدد")<0) ? nmv : "";
+      setTimeout(function(){ spName.focus(); }, 50);
+    }
+  }
+  function closeSaved(){ spEl.hidden = true; spTop.setAttribute("aria-expanded","false"); }
+  spTop.addEventListener("click", function(e){ e.stopPropagation(); if(spEl.hidden) openSaved(false); else closeSaved(); });
+  $("#spClose").addEventListener("click", closeSaved);
+  $("#saveLoc").addEventListener("click", function(){ setWx(false); openSaved(true); });
+  $("#spSave").addEventListener("click", function(){
+    if(curLat===null) return;
+    var nm = spName.value.trim() || ("موقع " + fmtLL(curLat, curLon).split("  ")[0]);
+    var dup = null;
+    places.forEach(function(p){ if(map.distance([p.lat,p.lon],[curLat,curLon]) < 5) dup = p; });
+    if(dup){ dup.name = nm.slice(0,60); dup.t = Date.now(); }
+    else places.push({id:"p"+Date.now().toString(36)+Math.floor(Math.random()*1000), name:nm.slice(0,60), lat:+curLat.toFixed(6), lon:+curLon.toFixed(6), t:Date.now()});
+    var ok = persist();
+    spName.value = ""; renderSaved();
+    spCur.textContent = ok ? "تم الحفظ في جوالك." : "تعذر الحفظ. قد يكون التخزين معطّلًا في المتصفح (الوضع الخاص).";
+  });
+  spName.addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); $("#spSave").click(); } });
+  $("#spExport").addEventListener("click", function(){
+    var txt = JSON.stringify({app:"map-weather", places:places}, null, 1);
+    var file = new File([txt], "مواقعي.json", {type:"application/json"});
+    if(navigator.canShare && navigator.canShare({files:[file]})){ navigator.share({files:[file], title:"مواقعي المحفوظة"}).catch(function(){}); return; }
+    var a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = "مواقعي.json";
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+  $("#spImport").addEventListener("click", function(){ $("#spFile").click(); });
+  $("#spFile").addEventListener("change", function(){
+    var f = this.files && this.files[0]; if(!f) return;
+    var rd = new FileReader();
+    rd.onload = function(){
+      try{
+        var j = JSON.parse(rd.result), arr = Array.isArray(j) ? j : j.places, n = 0;
+        (arr || []).forEach(function(p){
+          if(!p || typeof p.lat!=="number" || typeof p.lon!=="number" || Math.abs(p.lat)>90 || Math.abs(p.lon)>180) return;
+          var ex = places.some(function(x){ return map.distance([x.lat,x.lon],[p.lat,p.lon]) < 5; });
+          if(ex) return;
+          places.push({id:"p"+Date.now().toString(36)+Math.floor(Math.random()*100000), name:String(p.name||"موقع").slice(0,60), lat:p.lat, lon:p.lon, t:+p.t||Date.now()}); n++;
+        });
+        persist(); renderSaved(); spCur.textContent = "تم استيراد " + n + " موقع.";
+      }catch(e){ spCur.textContent = "الملف غير صالح."; }
+    };
+    rd.readAsText(f); this.value = "";
+  });
+  document.addEventListener("click", function(e){
+    if(spEl.hidden || e.target.closest("#spanel") || e.target.closest("#savedBtnTop")) return;
+    closeSaved();
+  });
+  function svZoom(){ map.getContainer().classList.toggle("sv-low", map.getZoom() < 9); }
+  map.on("zoomend", svZoom); svZoom();
+  drawSaved();
+
   /* ---------- Tidy layer picker: grouped in pairs, right-aligned ---------- */
   (function(){
     var kids = [].slice.call(chipsEl.children);
@@ -2082,7 +2246,7 @@ function setPlaceName(n){
     var btn = $("#layersBtn");
     btn.addEventListener("click", function(e){
       e.stopPropagation();
-      var open = chipsEl.hidden;
+      var open = chipsEl.hidden; if(open) closeSaved();
       chipsEl.hidden = !open; btn.setAttribute("aria-expanded", String(open));
     });
     document.addEventListener("click", function(e){
