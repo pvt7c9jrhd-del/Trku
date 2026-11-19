@@ -211,15 +211,19 @@ button{font:inherit;color:inherit;cursor:pointer}
 .lbl-pass span{color:#8a5a2b}
 .lbl-valley span{color:#6b4a2a;font-style:italic}
 .lbl-feat span{color:#0b7a6b}
+.lbl-fayda span{color:#2e7d32;font-style:italic;font-weight:600}
+.lbl-fayda span::before{content:"\25CF\00a0";font-size:9px}
 .lbl-place span{font-weight:500}
 .sat .lbl span{color:#fff;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 0 4px #000}
 .sat .lbl-wadi span{color:#a5d3ff}
 .sat .lbl-peak span{color:#ffc680}
 .sat .lbl-valley span{color:#e8c9a0}
 .sat .lbl-feat span{color:#8ff0df}
+.sat .lbl-fayda span{color:#9ef0a8}
 .night .lbl span{text-shadow:0 0 3px #0a1118,0 0 6px #0a1118,1px 1px 0 #0a1118,-1px -1px 0 #0a1118}
 .night .lbl-wadi span{color:#5aa5f5}
 .night .lbl-peak span{color:#f0902f}
+.night .lbl-fayda span{color:#7bd88f}
 .night .lbl-place span{color:#e6edf2}
 
 /* weather panel */
@@ -1771,8 +1775,11 @@ function setPlaceName(n){
   chipsEl.appendChild(namesChip);
   function setHint(msg){ hint.textContent = msg || ""; hint.hidden = !msg; }
 
+  var FAYDA_RE = /^(ال)?(فيضة|فيضه|فياض|فيض |روضة|روضه|روض |خبراء|خبرا |قيعان|قاع )/;
   function classify(t){
     if(t.waterway) return "wadi";
+    var nm = t["name:ar"] || t.name || "";
+    if(FAYDA_RE.test(nm) && !t.highway && !t.building && (!t.place || t.place==="locality")) return "fayda";
     if(t.natural==="peak"||t.natural==="volcano"||t.natural==="hill") return "peak";
     if(t.natural==="saddle"||t.mountain_pass) return "pass";
     if(t.natural==="valley"||t.natural==="ridge"||t.natural==="cliff"||t.natural==="arete") return "valley";
@@ -1811,7 +1818,7 @@ function setPlaceName(n){
   /* ---- persistent names cache (IndexedDB) so names work offline ---- */
   var nDB = null, pfTok = 0, MAXCH = 300;
   try{
-    var oq = indexedDB.open("names1", 1);
+    var oq = indexedDB.open("names2", 1);
     oq.onupgradeneeded = function(){ oq.result.createObjectStore("c", {keyPath:"id"}); };
     oq.onsuccess = function(){ nDB = oq.result; };
   }catch(e){}
@@ -1862,6 +1869,8 @@ function setPlaceName(n){
       'node["natural"~"^(peak|saddle|valley|spring|rock|cave_entrance|hill|volcano)$"]["name"]('+bb+');'+
       'node["mountain_pass"="yes"]["name"]('+bb+');'+
       'node["place"~"^(locality|hamlet|village|isolated_dwelling|farm|town|city)$"]["name"]('+bb+');'+
+      'node["name"~"^(ال)?(فيضة|فيضه|فياض|فيض |روضة|روضه|روض |خبراء|خبرا |قيعان|قاع )"]["place"!~"^(city|town|village|hamlet|suburb|neighbourhood|quarter|farm|isolated_dwelling)$"]["highway"!~"."]["building"!~"."]('+bb+');'+
+      'way["name"~"^(ال)?(فيضة|فيضه|فياض|فيض |روضة|روضه|روض |خبراء|خبرا |قيعان|قاع )"]["highway"!~"."]["building"!~"."]["waterway"!~"."]('+bb+');'+
       ');out geom 500;';
   }
   function overpass(q, signal){
