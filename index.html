@@ -61,6 +61,14 @@ button{font:inherit;color:inherit;cursor:pointer}
 .results b{display:block;font-weight:600}
 .results small{color:var(--muted)}
 .results .none{padding:12px 14px;color:var(--muted)}
+.lbtn{align-self:flex-start;display:inline-flex;gap:6px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 14px;box-shadow:var(--shadow);font-weight:600;font-size:14px}
+.lbtn[aria-expanded="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.lpanel{align-self:flex-start;width:min(330px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:10px 12px;display:flex;flex-direction:column;gap:10px;max-height:62dvh;overflow-y:auto}
+.lpanel[hidden]{display:none}
+.lg>b{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px}
+.lgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.lgrid .chip{box-shadow:none;border-radius:10px;padding:8px 6px;text-align:center;font-size:13px;min-width:0}
+.lgrid .chip.wide{grid-column:1/-1}
 .chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 14px;box-shadow:var(--shadow);font-weight:500;font-size:14px}
@@ -305,7 +313,10 @@ button{font:inherit;color:inherit;cursor:pointer}
           </div>
         </div>
       </div>
-      <div class="chips" id="layers" role="group" aria-label="نوع الخريطة"></div>
+      <button type="button" class="lbtn" id="layersBtn" aria-expanded="false" aria-controls="layers">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg>الطبقات
+      </button>
+      <div class="lpanel" id="layers" hidden role="group" aria-label="طبقات الخريطة والطقس"></div>
       <div class="measure-bar" id="measureBar" hidden>
         <div class="mrow"><span>المسافة: <b id="measureVal">0</b></span><span class="mtime" id="measureTime"></span></div>
         <div class="mrow">
@@ -1922,6 +1933,33 @@ function setPlaceName(n){
   namesChip.addEventListener("click", function(){ namesOn = !namesOn; store.set("names", namesOn?"1":"0"); applyNames(); });
   map.on("moveend", function(){ clearTimeout(nTimer); nTimer = setTimeout(loadNames, 500); });
   applyNames();
+
+  /* ---------- Tidy layer picker: grouped in pairs, right-aligned ---------- */
+  (function(){
+    var kids = [].slice.call(chipsEl.children);
+    function grp(title){
+      var g = document.createElement("div"); g.className = "lg";
+      var t = document.createElement("b"); t.textContent = title;
+      var gr = document.createElement("div"); gr.className = "lgrid";
+      g.appendChild(t); g.appendChild(gr); chipsEl.appendChild(g); return gr;
+    }
+    var gm = grp("نوع الخريطة"), gp = grp("المعالم"), gw = grp("الطقس والأمطار");
+    kids.forEach(function(c){ if(c.dataset.key) gm.appendChild(c); });
+    namesChip.classList.add("wide"); gp.appendChild(namesChip);
+    ["رادار المطر","خريطة الأمطار","حركة السحب","العواصف الرعدية"].forEach(function(t){
+      kids.forEach(function(c){ if(c.textContent===t) gw.appendChild(c); });
+    });
+    var btn = $("#layersBtn");
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      var open = chipsEl.hidden;
+      chipsEl.hidden = !open; btn.setAttribute("aria-expanded", String(open));
+    });
+    document.addEventListener("click", function(e){
+      if(chipsEl.hidden || e.target.closest("#layers") || e.target.closest("#layersBtn")) return;
+      chipsEl.hidden = true; btn.setAttribute("aria-expanded","false");
+    });
+  })();
 
   setLocation(start.lat, start.lon, start.name || null);
 })();
