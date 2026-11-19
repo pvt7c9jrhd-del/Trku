@@ -211,6 +211,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 .lbl-pass span{color:#8a5a2b}
 .lbl-valley span{color:#6b4a2a;font-style:italic}
 .lbl-feat span{color:#0b7a6b}
+.lbl-pa span{color:#1f7a4a;font-weight:700;font-size:13px;white-space:nowrap;transform:translate(-50%,-50%);display:inline-block;text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff}
+.sat .lbl-pa span,.night .lbl-pa span{color:#8be3ad;text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000}
+.pa-low .lbl-pa{display:none}
 .lbl-fayda span{color:#2e7d32;font-style:italic;font-weight:600}
 .lbl-fayda span::before{content:"\25CF\00a0";font-size:9px}
 .lbl-place span{font-weight:500}
@@ -1943,6 +1946,124 @@ function setPlaceName(n){
   map.on("moveend", function(){ clearTimeout(nTimer); nTimer = setTimeout(loadNames, 500); });
   applyNames();
 
+  /* ---------- Protected areas (المحميات): boundaries + names, cached for offline ---------- */
+  var paOn = store.get("pa")==="1", paLayer = L.layerGroup(), paSeen = {}, paDB = null, paQ = [], paBusy = false, paTotal = 0, paCount = 0;
+  var paChip = document.createElement("button");
+  paChip.type = "button"; paChip.className = "chip"; paChip.textContent = "حدود المحميات"; paChip.setAttribute("aria-pressed", String(paOn));
+  chipsEl.appendChild(paChip);
+  try{
+    var paq = indexedDB.open("pa1", 1);
+    paq.onupgradeneeded = function(){ paq.result.createObjectStore("c", {keyPath:"id"}); };
+    paq.onsuccess = function(){ paDB = paq.result; if(paOn) paStart(); };
+  }catch(e){}
+  function paGet(id, cb){
+    if(!paDB){ cb(null); return; }
+    try{ var q = paDB.transaction("c").objectStore("c").get(id); q.onsuccess = function(){ cb(q.result || null); }; q.onerror = function(){ cb(null); }; }catch(e){ cb(null); }
+  }
+  function paAll(cb){
+    if(!paDB){ cb([]); return; }
+    var out = [];
+    try{
+      var cur = paDB.transaction("c").objectStore("c").openCursor();
+      cur.onsuccess = function(){ var c = cur.result; if(c){ out.push(c.value); c.continue(); } else cb(out); };
+      cur.onerror = function(){ cb(out); };
+    }catch(e){ cb(out); }
+  }
+  function paPut(o){ try{ paDB.transaction("c","readwrite").objectStore("c").put(o); }catch(e){} }
+  function dpLine(g, tol){
+    var n = g.length/2; if(n < 3) return g;
+    var keep = new Uint8Array(n); keep[0] = keep[n-1] = 1;
+    var st = [[0, n-1]];
+    while(st.length){
+      var r = st.pop(), a = r[0], b = r[1], md = 0, mi = -1;
+      var ax = g[2*a], ay = g[2*a+1], bx = g[2*b], by = g[2*b+1], dx = bx-ax, dy = by-ay, L2 = dx*dx+dy*dy;
+      for(var i=a+1;i<b;i++){
+        var px = g[2*i], py = g[2*i+1], d;
+        if(L2 === 0) d = Math.sqrt((px-ax)*(px-ax)+(py-ay)*(py-ay));
+        else { var t = Math.max(0, Math.min(1, ((px-ax)*dx+(py-ay)*dy)/L2)); var qx = ax+t*dx, qy = ay+t*dy; d = Math.sqrt((px-qx)*(px-qx)+(py-qy)*(py-qy)); }
+        if(d > md){ md = d; mi = i; }
+      }
+      if(md > tol && mi > 0){ keep[mi] = 1; st.push([a, mi]); st.push([mi, b]); }
+    }
+    var out = [];
+    for(var k=0;k<n;k++) if(keep[k]) out.push(g[2*k], g[2*k+1]);
+    return out;
+  }
+  function paFetch(la, lo){
+    var bb = la+","+lo+","+(la+4)+","+(lo+4);
+    var q = '[out:json][timeout:120][maxsize:268435456];area["ISO3166-1"="SA"]->.sa;('+
+      'rel(area.sa)["boundary"="protected_area"]["name"]('+bb+');rel(area.sa)["leisure"="nature_reserve"]["name"]('+bb+');'+
+      'way(area.sa)["boundary"="protected_area"]["name"]('+bb+');way(area.sa)["leisure"="nature_reserve"]["name"]('+bb+');'+
+      ');out tags geom;';
+    return fetch("https://overpass-api.de/api/interpreter", {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data="+encodeURIComponent(q)})
+      .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function(j){
+        var items = [];
+        (j.elements || []).forEach(function(e){
+          var t = e.tags || {}, name = t["name:ar"] || t.name; if(!name) return;
+          var lines = [];
+          if(e.type==="relation") (e.members || []).forEach(function(m){ if(m.type==="way" && m.geometry && (m.role==="outer" || !m.role)) lines.push(m.geometry); });
+          else if(e.geometry) lines.push(e.geometry);
+          var out = [];
+          lines.forEach(function(gm){
+            var flat = []; gm.forEach(function(pt){ if(pt) flat.push(pt.lat, pt.lon); });
+            if(flat.length >= 4) out.push(dpLine(flat, 0.003).map(function(x){ return +x.toFixed(4); }));
+          });
+          if(!out.length) return;
+          var c, b = e.bounds;
+          if(b) c = [(b.minlat+b.maxlat)/2, (b.minlon+b.maxlon)/2];
+          else { var f = out[0]; c = [f[0], f[1]]; }
+          items.push({id:e.type+e.id, name:name, c:c, lines:out});
+        });
+        return {id:la+","+lo, t:Date.now(), items:items};
+      });
+  }
+  function paDraw(items){
+    items.forEach(function(it){
+      if(paSeen[it.id]) return; paSeen[it.id] = 1;
+      it.lines.forEach(function(g){
+        var ll = []; for(var i=0;i<g.length;i+=2) ll.push([g[i], g[i+1]]);
+        L.polyline(ll, {color:"#2e8b57", weight:2.2, opacity:.9, dashArray:"9 6", interactive:false}).addTo(paLayer);
+      });
+      L.marker(it.c, {icon:L.divIcon({className:"lbl lbl-pa", html:"<span>"+esc(it.name)+"</span>", iconSize:[0,0]}), interactive:false, keyboard:false}).addTo(paLayer);
+    });
+  }
+  function paRun(){
+    if(paBusy || !paOn || !paDB || navigator.onLine===false) return;
+    var c = paQ.shift();
+    if(!c){ if(paTotal){ netMsg("تم حفظ حدود المحميات للعمل دون إنترنت.", 4000); paTotal = 0; paCount = 0; } return; }
+    paBusy = true;
+    paGet(c, function(ex){
+      if(ex){ paBusy = false; paRun(); return; }
+      var pp = c.split(",");
+      paFetch(+pp[0], +pp[1]).then(function(o){ paPut(o); if(paOn) paDraw(o.items); }).catch(function(){}).then(function(){
+        paCount++; netMsg("جارٍ تحميل حدود المحميات… " + paCount + "/" + paTotal);
+        paBusy = false; setTimeout(paRun, 2500);
+      });
+    });
+  }
+  function paStart(){
+    paLayer.addTo(map);
+    paAll(function(cs){
+      cs.forEach(function(c){ paDraw(c.items); });
+      var have = {}; cs.forEach(function(c){ have[c.id] = 1; });
+      var ctr = map.getCenter(), cells = [];
+      for(var la=16; la<=32; la+=4) for(var lo=34; lo<=54; lo+=4) if(!have[la+","+lo]) cells.push([la, lo]);
+      cells.sort(function(a, b){ return Math.hypot(a[0]+2-ctr.lat, a[1]+2-ctr.lng) - Math.hypot(b[0]+2-ctr.lat, b[1]+2-ctr.lng); });
+      paQ = cells.map(function(c){ return c[0]+","+c[1]; }); paTotal = paQ.length; paCount = 0;
+      if(paTotal) paRun();
+    });
+  }
+  function paApply(){
+    paChip.setAttribute("aria-pressed", String(paOn));
+    if(paOn) paStart();
+    else { map.removeLayer(paLayer); paQ = []; paTotal = 0; }
+  }
+  paChip.addEventListener("click", function(){ paOn = !paOn; store.set("pa", paOn?"1":"0"); paApply(); });
+  window.addEventListener("online", function(){ if(paOn) paStart(); });
+  function paZoom(){ map.getContainer().classList.toggle("pa-low", map.getZoom() < 6); }
+  map.on("zoomend", paZoom); paZoom();
+
   /* ---------- Tidy layer picker: grouped in pairs, right-aligned ---------- */
   (function(){
     var kids = [].slice.call(chipsEl.children);
@@ -1954,7 +2075,7 @@ function setPlaceName(n){
     }
     var gm = grp("نوع الخريطة"), gp = grp("المعالم"), gw = grp("الطقس والأمطار");
     kids.forEach(function(c){ if(c.dataset.key) gm.appendChild(c); });
-    namesChip.classList.add("wide"); gp.appendChild(namesChip);
+    gp.appendChild(namesChip); gp.appendChild(paChip);
     ["رادار المطر","خريطة الأمطار","حركة السحب","العواصف الرعدية"].forEach(function(t){
       kids.forEach(function(c){ if(c.textContent===t) gw.appendChild(c); });
     });
