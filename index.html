@@ -83,6 +83,9 @@ button{font:inherit;color:inherit;cursor:pointer}
 .mpt{display:block;width:16px;height:16px;box-sizing:border-box;background:#fff;border:3px solid #e8890c;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.45)}
 
 /* Windy radar/lightning sheet */
+.wmenu{bottom:34px;inset-inline-end:70px;display:flex;flex-direction:column;gap:6px;z-index:1250}
+.wmenu[hidden]{display:none}
+.wmenu button{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 14px;font-size:14px;text-align:start;box-shadow:var(--shadow);white-space:nowrap}
 .rsheet{position:fixed;inset:0;z-index:1500;background:var(--bg);display:flex;flex-direction:column}
 .rsheet[hidden]{display:none}
 .rhead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--surface)}
@@ -360,13 +363,12 @@ button{font:inherit;color:inherit;cursor:pointer}
       <div class="legend" id="wbLegend" hidden></div>
       <small id="wbNote"></small>
     </div>
-    <div class="rsheet" id="rsheet" hidden role="dialog" aria-label="رادار المطر والبرق">
-      <div class="rhead">
-        <div class="rtabs" id="rtabs"></div>
-        <button type="button" class="rclose" id="rclose" aria-label="إغلاق">×</button>
-      </div>
-      <iframe class="rframe" id="rframe" title="خرائط الطقس" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allow="geolocation"></iframe>
-      <div class="rfoot"><span id="rnote">التوقعات والرادار من Windy.com. حرّك شريط الزمن بالأسفل لمعرفة أين ومتى وبأي اتجاه تتحرك السحب والعواصف.</span></div>
+    <div class="float wmenu" id="wmenu" hidden role="menu" aria-label="طبقات الطقس على الخريطة">
+      <button type="button" data-l="radar">رادار المطر (آخر ساعتين)</button>
+      <button type="button" data-l="rainmap">خريطة توقعات الأمطار</button>
+      <button type="button" data-l="clouds">حركة السحب واتجاهها</button>
+      <button type="button" data-l="storms">العواصف الرعدية ⚡</button>
+      <button type="button" data-l="off">إخفاء الطبقات</button>
     </div>
     <div class="float navbot" id="navbot" hidden></div>
     <div class="float tools">
@@ -791,28 +793,17 @@ function setPlaceName(n){
     } else startLive();
   });
 
-  /* ---------- Radar / rain / lightning forecast sheet (Windy embed) ---------- */
-  var RT = [["rain","الأمطار"],["thunder","الرعد والبرق"],["radar","الرادار"],["satellite","الأقمار"],["clouds","السحب"],["wind","الرياح والاتجاه"]];
-  var rsheet = $("#rsheet"), rframe = $("#rframe"), rtabs = $("#rtabs"), rOv = "rain";
-  RT.forEach(function(x){
-    var b = document.createElement("button");
-    b.type = "button"; b.className = "rtab"; b.textContent = x[1]; b.dataset.ov = x[0]; b.setAttribute("aria-pressed","false");
-    b.addEventListener("click", function(){ rOv = x[0]; loadRadarFrame(); });
-    rtabs.appendChild(b);
+  /* ---------- Weather layers menu (everything stays inside this page) ---------- */
+  var wmenu = $("#wmenu");
+  $("#radarBtn").addEventListener("click", function(e){ e.stopPropagation(); wmenu.hidden = !wmenu.hidden; });
+  wmenu.addEventListener("click", function(e){
+    var b = e.target.closest("[data-l]"); if(!b) return;
+    wmenu.hidden = true;
+    var k = b.dataset.l;
+    if(k==="off"){ if(wxLayer) setWxLayer(wxLayer); }
+    else if(wxLayer!==k) setWxLayer(k);
   });
-  function loadRadarFrame(){
-    var lat = (curLat!=null ? curLat : map.getCenter().lat), lon = (curLon!=null ? curLon : map.getCenter().lng);
-    var z = Math.max(5, Math.min(9, Math.round(map.getZoom())-2));
-    var q = "lat="+lat.toFixed(3)+"&lon="+lon.toFixed(3)+"&detailLat="+lat.toFixed(3)+"&detailLon="+lon.toFixed(3)+
-      "&zoom="+z+"&level=surface&overlay="+rOv+"&product=ecmwf&menu=&message=true&marker=true&calendar=now&type=map&location=coordinates&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1";
-    rframe.src = "https://embed.windy.com/embed2.html?" + q;
-    Array.prototype.forEach.call(rtabs.children, function(b){ b.setAttribute("aria-pressed", String(b.dataset.ov===rOv)); });
-  }
-  function openRadar(ov){ if(ov) rOv = ov; rsheet.hidden = false; loadRadarFrame(); }
-  function closeRadar(){ rsheet.hidden = true; rframe.removeAttribute("src"); }
-  $("#radarBtn").addEventListener("click", function(){ openRadar(); });
-  $("#rclose").addEventListener("click", closeRadar);
-  document.addEventListener("keydown", function(e){ if(e.key==="Escape" && !rsheet.hidden) closeRadar(); });
+  document.addEventListener("click", function(e){ if(!e.target.closest("#wmenu") && !e.target.closest("#radarBtn")) wmenu.hidden = true; });
 
   /* ---------- Offline road network: cache paved roads + local routing ---------- */
   var rDB = null, RSPD = [110,100,90,75,55], rQueue = [], rBusy = false, rDone = {}, rSession = 0, rTotal = 0, rCount = 0;
@@ -1471,7 +1462,7 @@ function setPlaceName(n){
         '<div class="legend">ارتفاع العمود = كمية المطر · درجة اللون = اتفاق النماذج: <i style="background:#a8cdee"></i>ضعيف <i style="background:#4a90d9"></i>جيد <i style="background:#1f5fae"></i>كامل</div>'+
         mv+
         '<p class="note">المجموع المتوقع خلال 12 ساعة: '+total.toFixed(1)+' ملم (متوسط 3 نماذج: ECMWF وICON وGFS). دقة النماذج بين 11 و25 كم، فالمطر المحلي قد يخطئ موقعه. للتأكد اللحظي راجع الرادار. اتجاه الحركة تقدير من رياح 700 hPa.</p>'+
-        '<div class="mrow" style="margin-top:8px"><button type="button" class="cbtn" data-wx="windy-radar">الرادار</button><button type="button" class="cbtn" data-wx="windy-rain">خريطة الأمطار</button><button type="button" class="cbtn" data-wx="storms">العواصف على الخريطة</button></div>';
+        '<div class="mrow" style="margin-top:8px"><button type="button" class="cbtn" data-wx="radar">الرادار</button><button type="button" class="cbtn" data-wx="rainmap">خريطة الأمطار</button><button type="button" class="cbtn" data-wx="storms">العواصف على الخريطة</button></div>';
     }).catch(function(){
       if(seq===rainSeq && $("#rainOut")) $("#rainOut").innerHTML = '<h2>الأمطار القادمة</h2><div class="state">تعذر تحليل الأمطار الآن.</div>';
     });
@@ -1531,7 +1522,7 @@ function setPlaceName(n){
       cl("منخفضة", h.cloud_cover_low[i0])+cl("متوسطة", h.cloud_cover_mid[i0])+cl("عالية", h.cloud_cover_high[i0])+
       '<p class="note">التقدير مبني على نموذج Open-Meteo (الطاقة الحملية CAPE واحتمال الأمطار). لمشاهدة توقعات البرق والأمطار وحركتها على الخريطة استخدم الأزرار التالية.</p>'+
       '<div class="mrow" style="margin-top:10px"><button type="button" class="cbtn" data-wx="radar">رادار المطر على الخريطة</button><button type="button" class="cbtn" data-wx="clouds">حركة السحب على الخريطة</button><button type="button" class="cbtn" data-wx="storms">العواصف الرعدية على الخريطة</button></div>'+
-      '<div class="mrow" style="margin-top:8px"><button type="button" class="cbtn" data-wx="windy-thunder">توقعات الرعد والبرق</button><button type="button" class="cbtn" data-wx="windy-rain">توقعات الأمطار</button><button type="button" class="cbtn" data-wx="windy-radar">الرادار</button></div>'+
+      '<div class="mrow" style="margin-top:8px"><button type="button" class="cbtn" data-wx="storms">العواصف الرعدية</button><button type="button" class="cbtn" data-wx="rainmap">توقعات الأمطار</button><button type="button" class="cbtn" data-wx="radar">الرادار</button></div>'+
       '</section>';
   }
 
@@ -1545,11 +1536,11 @@ function setPlaceName(n){
     b.addEventListener("click", function(){ setWxLayer(key); });
     chipsEl.appendChild(b); return b;
   }
-  var chipRadar = mkChip("رادار المطر","radar"), chipCloud = mkChip("حركة السحب","clouds"), chipStorm = mkChip("العواصف الرعدية","storms");
+  var chipRadar = mkChip("رادار المطر","radar"), chipCloud = mkChip("حركة السحب","clouds"), chipStorm = mkChip("العواصف الرعدية","storms"), chipRM = mkChip("خريطة الأمطار","rainmap");
   function isCl(n){ return n==="clouds" || n==="storms"; }
   function setNote(m){ $("#wbNote").textContent = m || ""; }
   function stopPlay(){ clearInterval(wTimer); wTimer = null; $("#wbPlay").textContent = "تشغيل"; }
-  function onRange(v){ if(wxLayer==="radar") showRadar(v); else if(isCl(wxLayer)) showClouds(v); }
+  function onRange(v){ if(wxLayer==="radar") showRadar(v); else if(isCl(wxLayer)) showClouds(v); else if(wxLayer==="rainmap") showRainMap(v); }
   function startPlay(ms){
     stopPlay(); $("#wbPlay").textContent = "إيقاف";
     wTimer = setInterval(function(){
@@ -1558,7 +1549,7 @@ function setPlaceName(n){
       r.value = v; onRange(v);
     }, ms);
   }
-  $("#wbPlay").addEventListener("click", function(){ if(wTimer) stopPlay(); else startPlay(wxLayer==="radar" ? 3000 : 1200); });
+  $("#wbPlay").addEventListener("click", function(){ if(wTimer) stopPlay(); else startPlay(wxLayer==="radar" ? 3000 : wxLayer==="rainmap" ? 900 : 1200); });
   $("#wbRange").addEventListener("input", function(){ stopPlay(); onRange(+this.value); });
 
   function setWxLayer(name){
@@ -1566,7 +1557,9 @@ function setPlaceName(n){
     stopPlay();
     if(radar.layer){ map.removeLayer(radar.layer); radar.layer = null; }
     cloud.group.clearLayers(); map.removeLayer(cloud.group);
+    if(rmap.ov){ map.removeLayer(rmap.ov); rmap.ov = null; } rmap.seq++; rmap.b = null;
     wxLayer = name;
+    chipRM.setAttribute("aria-pressed", String(name==="rainmap"));
     chipRadar.setAttribute("aria-pressed", String(name==="radar"));
     chipCloud.setAttribute("aria-pressed", String(name==="clouds"));
     chipStorm.setAttribute("aria-pressed", String(name==="storms"));
@@ -1576,10 +1569,78 @@ function setPlaceName(n){
       lg.hidden = false;
       lg.innerHTML = "قوة العاصفة ⚡: " + ["ضعيفة","متوسطة","قوية","شديدة"].map(function(t,i){ return '<i style="background:'+STC[i][0]+';border:1px solid '+STC[i][1]+'"></i>'+t; }).join(" ") +
         " · المطر: " + ["خفيف","معتدل","غزير","شديد"].map(function(t,i){ return '<i style="background:'+RNC[i]+'"></i>'+t; }).join(" ");
+    } else if(name==="rainmap"){
+      lg.hidden = false;
+      lg.innerHTML = "ملم/ساعة: " + [["خفيف","#9fd3ff"],["0.5","#4aa3ff"],["1","#2b6fe0"],["2.5","#7a3fd1"],["5","#d13fa6"],["10+","#e5321f"]].map(function(x){ return '<i style="background:'+x[1]+'"></i>'+x[0]; }).join(" ");
     } else lg.hidden = true;
     $("#wbRange").value = 0; $("#wbRange").max = 0;
     if(name==="radar") loadRadar();
     else if(isCl(name)){ cloud.group.addTo(map); loadClouds(); }
+    else if(name==="rainmap") loadRainMap();
+  }
+
+  /* ---- Rain forecast map: model grid drawn as a smooth colour overlay, up to 48 h ---- */
+  var rmap = {ov:null, b:null, grid:null, times:[], seq:0, zoom:0, cols:10, rows:8};
+  var RSTOPS = [[0.05,159,211,255,0],[0.1,159,211,255,140],[0.5,74,163,255,185],[1,43,111,224,205],[2.5,122,63,209,220],[5,209,63,166,230],[10,229,50,31,240]];
+  function rainRGBA(v){
+    if(v < RSTOPS[0][0]) return [0,0,0,0];
+    for(var i=1;i<RSTOPS.length;i++){
+      if(v <= RSTOPS[i][0]){
+        var a = RSTOPS[i-1], b = RSTOPS[i], f = (v-a[0])/(b[0]-a[0]);
+        return [a[1]+(b[1]-a[1])*f, a[2]+(b[2]-a[2])*f, a[3]+(b[3]-a[3])*f, a[4]+(b[4]-a[4])*f];
+      }
+    }
+    var l = RSTOPS[RSTOPS.length-1]; return [l[1],l[2],l[3],l[4]];
+  }
+  function mercY(lat){ return Math.log(Math.tan(Math.PI/4 + lat*Math.PI/360)); }
+  function mercLat(y){ return (2*Math.atan(Math.exp(y)) - Math.PI/2)*180/Math.PI; }
+  function loadRainMap(){
+    var seq = ++rmap.seq;
+    $("#wbTitle").textContent = "توقعات الأمطار (حتى 48 ساعة)"; $("#wbTime").textContent = "";
+    if(navigator.onLine===false){ setNote("يحتاج اتصالًا بالإنترنت."); return; }
+    if(map.getZoom() < 4){ setNote("قرّب الخريطة قليلًا لعرض توقعات الأمطار."); return; }
+    var b = map.getBounds().pad(0.1), cols = rmap.cols, rows = rmap.rows;
+    var S = Math.max(-80, b.getSouth()), N = Math.min(80, b.getNorth()), y0 = mercY(S), y1 = mercY(N), lats = [], lons = [];
+    for(var r=0;r<rows;r++){
+      var la = mercLat(y1 - (r+.5)/rows*(y1-y0));
+      for(var c=0;c<cols;c++){
+        var lo = b.getWest() + (c+.5)/cols*(b.getEast()-b.getWest());
+        lo = ((lo+540)%360) - 180;
+        lats.push(la.toFixed(3)); lons.push(lo.toFixed(3));
+      }
+    }
+    setNote("جارٍ تحميل توقعات الأمطار…");
+    var url = "https://api.open-meteo.com/v1/forecast?latitude="+lats.join(",")+"&longitude="+lons.join(",")+"&hourly=precipitation&forecast_hours=49&timezone=GMT";
+    fetch(url).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }).then(function(j){
+      if(seq!==rmap.seq || wxLayer!=="rainmap") return;
+      var arr = Array.isArray(j) ? j : [j], n = arr[0].hourly.time.length, g = [];
+      for(var h=0;h<n;h++){
+        var row = new Float32Array(rows*cols);
+        for(var k=0;k<row.length;k++){ var v = arr[k] && arr[k].hourly.precipitation[h]; row[k] = v || 0; }
+        g.push(row);
+      }
+      rmap.grid = g; rmap.times = arr[0].hourly.time;
+      rmap.b = L.latLngBounds([S, b.getWest()], [N, b.getEast()]); rmap.zoom = map.getZoom();
+      var rg = $("#wbRange"); rg.min = 0; rg.max = n-1; if(+rg.value > n-1) rg.value = 0;
+      showRainMap(+rg.value);
+      setNote("توقعات النماذج (الشبكة تتفصّل كلما قرّبت). الألوان تمثل كمية المطر بالملم في الساعة. ليست رادارًا، فللمطر الجاري استخدم «رادار المطر».");
+    }).catch(function(){ if(seq===rmap.seq && wxLayer==="rainmap") setNote("تعذر تحميل توقعات الأمطار الآن."); });
+  }
+  function showRainMap(i){
+    if(!rmap.grid || !rmap.grid[i] || !rmap.b) return;
+    var cols = rmap.cols, rows = rmap.rows, sm = document.createElement("canvas");
+    sm.width = cols; sm.height = rows;
+    var sx = sm.getContext("2d"), img = sx.createImageData(cols, rows), d = img.data, row = rmap.grid[i];
+    for(var k=0;k<row.length;k++){ var c = rainRGBA(row[k]); d[k*4] = c[0]; d[k*4+1] = c[1]; d[k*4+2] = c[2]; d[k*4+3] = c[3]; }
+    sx.putImageData(img, 0, 0);
+    var big = document.createElement("canvas"); big.width = cols*48; big.height = rows*48;
+    var bx = big.getContext("2d"); bx.imageSmoothingEnabled = true; bx.imageSmoothingQuality = "high";
+    bx.drawImage(sm, 0, 0, big.width, big.height);
+    var url = big.toDataURL("image/png");
+    if(rmap.ov) rmap.ov.setUrl(url);
+    else rmap.ov = L.imageOverlay(url, rmap.b, {opacity:1, interactive:false}).addTo(map);
+    var dt = new Date(rmap.times[i] + "Z");
+    $("#wbTime").textContent = dt.toLocaleString("ar-u-nu-latn", {weekday:"short", hour:"numeric"}) + (i===0 ? " · الآن" : " · بعد "+i+" س");
   }
 
   function loadRadar(){
@@ -1669,11 +1730,13 @@ function setPlaceName(n){
   }
   map.on("moveend", function(){
     clearTimeout(cloud.timer);
-    cloud.timer = setTimeout(function(){ if(isCl(wxLayer)) loadClouds(); }, 800);
+    cloud.timer = setTimeout(function(){
+      if(isCl(wxLayer)) loadClouds();
+      else if(wxLayer==="rainmap" && (!rmap.b || !rmap.b.contains(map.getBounds()) || Math.abs(map.getZoom()-rmap.zoom) >= 1)) loadRainMap();
+    }, 800);
   });
   $("#wx").addEventListener("click", function(e){
     var b = e.target.closest("[data-wx]"); if(!b) return;
-    if(b.dataset.wx.indexOf("windy-")===0){ openRadar(b.dataset.wx.slice(6)); setWx(false); return; }
     setWxLayer(b.dataset.wx);
     if(window.matchMedia("(max-width:820px)").matches) setWx(false);
   });
