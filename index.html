@@ -374,7 +374,8 @@ button{font:inherit;color:inherit;cursor:pointer}
         <div class="dlrow"><span>التفاصيل</span><select id="dlZoom"><option value="13">متوسطة</option><option value="14">عالية</option><option value="15" selected>عالية جدًا</option></select></div>
         <div class="dlchecks">
           <label><input type="checkbox" data-l="std"> الخريطة</label>
-          <label><input type="checkbox" data-l="topo"> التضاريس</label>
+          <label><input type="checkbox" data-l="topo"> التضاريس (كنتور)</label>
+          <label><input type="checkbox" data-l="cyc"> طرق ومسارات</label>
           <label><input type="checkbox" data-l="sat"> قمر صناعي</label>
           <label><input type="checkbox" id="dlExtra" checked> الأسماء والطرق</label>
         </div>
@@ -2264,7 +2265,7 @@ function setPlaceName(n){
 
 /* ---------- Download an area for offline use (tiles + names + roads) ---------- */
   var dlP = $("#dlpanel"), dlRun = false, dlJob = 0, DLCAP = 6000;
-  var dlKB = {std: L.Browser.retina ? 40 : 15, topo: 28, sat: 38};
+  var dlKB = {std: L.Browser.retina ? 40 : 15, topo: 28, cyc: 30, sat: 38};
   function dlBounds(){
     var c = map.getCenter(), km = +$("#dlRad").value;
     var dLat = km/110.57, dLon = km/(111.32*Math.cos(c.lat*Math.PI/180));
@@ -2308,7 +2309,7 @@ function setPlaceName(n){
     $("#layers").hidden = true; $("#layersBtn").setAttribute("aria-expanded","false");
     if(typeof closeSaved === "function") closeSaved();
     var cur = current;
-    [].forEach.call(dlP.querySelectorAll("input[data-l]"), function(i){ i.checked = (i.dataset.l === (LAYERS[cur] && ["std","topo","sat"].indexOf(cur)>=0 ? cur : "std")); });
+    [].forEach.call(dlP.querySelectorAll("input[data-l]"), function(i){ i.checked = (i.dataset.l === (LAYERS[cur] && ["std","topo","cyc","sat"].indexOf(cur)>=0 ? cur : "std")); });
     dlP.hidden = false; dlEstimate();
     var areas = []; try{ areas = JSON.parse(store.get("dlAreas") || "[]"); }catch(e){}
     $("#dlDone").textContent = areas.length ? "مناطق حمّلتها سابقًا: " + areas.slice(-5).map(function(a){ return a.lat.toFixed(2)+"، "+a.lon.toFixed(2)+" ("+a.km+" كم)"; }).join(" · ") : "";
