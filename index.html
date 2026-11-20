@@ -7,6 +7,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="خريطة وطقس">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#0f4c5c">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
@@ -77,6 +81,12 @@ button{font:inherit;color:inherit;cursor:pointer}
 .sitem .sact.del{color:#c0392b}
 .sfoot{display:flex;gap:6px}
 .sfoot button,.sadd .cbtn{border:1px solid var(--line);background:var(--surface2);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px}
+.dlrow{display:flex;gap:8px;align-items:center;font-size:13px}
+.dlrow select{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface2);border-radius:8px;padding:5px 8px;font:inherit;font-size:13px}
+.dlchecks{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px}
+.dlchecks label{display:flex;gap:6px;align-items:center}
+.dlbar{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.dlbar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
 .svpin{background:none;border:0}
 .svpin span{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#f5b301;color:#fff;font-size:13px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
 .sv-low .svtip{display:none}
@@ -356,6 +366,23 @@ button{font:inherit;color:inherit;cursor:pointer}
         <div class="slist" id="spList"></div>
         <div class="sfoot"><button type="button" id="spExport">نسخة احتياطية</button><button type="button" id="spImport">استيراد</button><input type="file" id="spFile" accept=".json,application/json" hidden></div>
         <small>تُحفظ في جوالك فقط ولا تُرسل إلى أي جهة. إذا مسحت بيانات Safari ستُحذف، فاحتفظ بنسخة احتياطية.</small>
+      </div>
+      <div class="spanel" id="dlpanel" hidden role="dialog" aria-label="تحميل منطقة للعمل بدون إنترنت">
+        <div class="sh"><b>تحميل منطقة بدون إنترنت</b><button type="button" class="x2" id="dlClose" aria-label="إغلاق">×</button></div>
+        <small>المركز: وسط الخريطة الظاهرة الآن. حرّك الخريطة إلى منطقة رحلتك ثم حدّد الخيارات.</small>
+        <div class="dlrow"><span>المساحة</span><select id="dlRad"><option value="10">10 كم حول المركز</option><option value="25" selected>25 كم حول المركز</option><option value="50">50 كم حول المركز</option></select></div>
+        <div class="dlrow"><span>التفاصيل</span><select id="dlZoom"><option value="13">متوسطة</option><option value="14">عالية</option><option value="15" selected>عالية جدًا</option></select></div>
+        <div class="dlchecks">
+          <label><input type="checkbox" data-l="std"> الخريطة</label>
+          <label><input type="checkbox" data-l="topo"> التضاريس</label>
+          <label><input type="checkbox" data-l="sat"> قمر صناعي</label>
+          <label><input type="checkbox" id="dlExtra" checked> الأسماء والطرق</label>
+        </div>
+        <small id="dlEst"></small>
+        <div class="dlbar"><i id="dlFill"></i></div>
+        <div class="sfoot"><button type="button" id="dlStart">ابدأ التحميل</button><button type="button" id="dlStop" hidden>إيقاف</button></div>
+        <small id="dlMsg">للاستخدام الشخصي لمناطق محدودة، فخوادم الخرائط المجانية تمنع التحميل الكثيف.</small>
+        <small id="dlDone"></small>
       </div>
       <div class="lpanel" id="layers" hidden role="group" aria-label="طبقات الخريطة والطقس"></div>
       <div class="measure-bar" id="measureBar" hidden>
@@ -1435,13 +1462,18 @@ function setPlaceName(n){
   }
   window.addEventListener("online", function(){ netMsg("عاد الاتصال بالإنترنت.", 3000); });
   window.addEventListener("offline", offlineState);
+  function tileUrl(layer, x, y, z){
+    var sd = layer.options.subdomains, sub = "a";
+    if(sd){ sub = (typeof sd==="string" ? sd.charAt(Math.abs(x+y) % sd.length) : sd[Math.abs(x+y) % sd.length]) || "a"; }
+    return L.Util.template(layer._url, {r: L.Browser.retina ? "@2x" : "", s: sub, x: x, y: y, z: z});
+  }
   function tileList(layer, zmin, zmax){
     var W = 34.5, E = 56.0, S = 16.0, N = 32.5, urls = [];
     function tx(lon, z){ return Math.floor((lon+180)/360*Math.pow(2,z)); }
     function ty(lat, z){ var r = lat*Math.PI/180; return Math.floor((1 - Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z)); }
     for(var z=zmin; z<=zmax; z++){
       var x0 = tx(W,z), x1 = tx(E,z), y0 = ty(N,z), y1 = ty(S,z);
-      for(var x=x0;x<=x1;x++) for(var y=y0;y<=y1;y++) urls.push(layer.getTileUrl({x:x, y:y, z:z}));
+      for(var x=x0;x<=x1;x++) for(var y=y0;y<=y1;y++) urls.push(tileUrl(layer, x, y, z));
     }
     return urls;
   }
@@ -1449,8 +1481,9 @@ function setPlaceName(n){
     navigator.serviceWorker.register("sw.js").catch(function(){});
     navigator.serviceWorker.addEventListener("message", function(e){
       var d = e.data || {};
-      if(d.type==="precache-progress"){
-        if(d.done>=d.total){ store.set("pre_"+current, "1"); netMsg("تم تجهيز خريطة السعودية للعمل دون إنترنت.", 5000); }
+      if(d.type==="precache-progress" && d.job==="area"){ dlProgress(d.done, d.total); }
+      else if(d.type==="precache-progress"){
+        if(d.done>=d.total){ store.set("pre2_"+current, "1"); netMsg("تم تجهيز خريطة السعودية للعمل دون إنترنت.", 5000); }
         else netMsg("جارٍ تجهيز الخريطة للعمل دون إنترنت… " + Math.round(d.done/d.total*100) + "%");
       }
     });
@@ -1458,7 +1491,7 @@ function setPlaceName(n){
       setTimeout(function(){
         if(navigator.onLine===false || !reg.active) return;
         var key = current;
-        if(store.get("pre_"+key)) return;
+        if(store.get("pre2_"+key)) return;
         reg.active.postMessage({type:"precache", urls:tileList(LAYERS[key].layer, 3, 8)});
       }, 4000);
     });
@@ -2171,6 +2204,7 @@ function setPlaceName(n){
   }
   function openSaved(prefill){
     $("#layers").hidden = true; $("#layersBtn").setAttribute("aria-expanded","false");
+    if(typeof closeDl === "function") closeDl();
     spEl.hidden = false; spTop.setAttribute("aria-expanded","true");
     updateCur(); renderSaved();
     if(prefill){
@@ -2228,6 +2262,125 @@ function setPlaceName(n){
   map.on("zoomend", svZoom); svZoom();
   drawSaved();
 
+/* ---------- Download an area for offline use (tiles + names + roads) ---------- */
+  var dlP = $("#dlpanel"), dlRun = false, dlJob = 0, DLCAP = 6000;
+  var dlKB = {std: L.Browser.retina ? 40 : 15, topo: 28, sat: 38};
+  function dlBounds(){
+    var c = map.getCenter(), km = +$("#dlRad").value;
+    var dLat = km/110.57, dLon = km/(111.32*Math.cos(c.lat*Math.PI/180));
+    return L.latLngBounds([c.lat-dLat, c.lng-dLon], [c.lat+dLat, c.lng+dLon]);
+  }
+  function tx(lon, z){ return Math.floor((lon+180)/360*Math.pow(2,z)); }
+  function ty(lat, z){ var r = Math.max(-85, Math.min(85, lat))*Math.PI/180; return Math.floor((1 - Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z)); }
+  function dlKeys(){
+    var k = []; [].forEach.call(dlP.querySelectorAll("input[data-l]"), function(i){ if(i.checked) k.push(i.dataset.l); });
+    return k;
+  }
+  function dlCount(keys, b, zmax){
+    var n = 0, kb = 0;
+    keys.forEach(function(k){
+      var zm = Math.min(zmax, LAYERS[k].layer.options.maxZoom || 18), c = 0;
+      for(var z=9; z<=zm; z++) c += (tx(b.getEast(),z)-tx(b.getWest(),z)+1) * (ty(b.getSouth(),z)-ty(b.getNorth(),z)+1);
+      n += c; kb += c*dlKB[k];
+    });
+    return {n:n, mb:Math.round(kb/1024)};
+  }
+  function dlUrls(keys, b, zmax){
+    var urls = [];
+    keys.forEach(function(k){
+      var layer = LAYERS[k].layer, zm = Math.min(zmax, layer.options.maxZoom || 18);
+      for(var z=9; z<=zm; z++){
+        var x0 = tx(b.getWest(),z), x1 = tx(b.getEast(),z), y0 = ty(b.getNorth(),z), y1 = ty(b.getSouth(),z);
+        for(var x=x0;x<=x1;x++) for(var y=y0;y<=y1;y++) urls.push(tileUrl(layer, x, y, z));
+      }
+    });
+    return urls;
+  }
+  function dlEstimate(){
+    var keys = dlKeys(), b = dlBounds(), z = +$("#dlZoom").value, est = $("#dlEst");
+    if(!keys.length && !$("#dlExtra").checked){ est.textContent = "اختر خريطة واحدة على الأقل."; $("#dlStart").disabled = true; return; }
+    var c = dlCount(keys, b, z);
+    if(c.n > DLCAP){ est.textContent = "الحجم كبير جدًا (" + c.n + " قطعة، حوالي " + c.mb + " ميغابايت). قلّل المساحة أو التفاصيل."; $("#dlStart").disabled = true; return; }
+    est.textContent = "الحجم التقريبي: " + c.n + " قطعة خريطة، حوالي " + c.mb + " ميغابايت" + ($("#dlExtra").checked ? " (غير الأسماء والطرق)." : ".");
+    $("#dlStart").disabled = dlRun;
+  }
+  function openDl(){
+    $("#layers").hidden = true; $("#layersBtn").setAttribute("aria-expanded","false");
+    if(typeof closeSaved === "function") closeSaved();
+    var cur = current;
+    [].forEach.call(dlP.querySelectorAll("input[data-l]"), function(i){ i.checked = (i.dataset.l === (LAYERS[cur] && ["std","topo","sat"].indexOf(cur)>=0 ? cur : "std")); });
+    dlP.hidden = false; dlEstimate();
+    var areas = []; try{ areas = JSON.parse(store.get("dlAreas") || "[]"); }catch(e){}
+    $("#dlDone").textContent = areas.length ? "مناطق حمّلتها سابقًا: " + areas.slice(-5).map(function(a){ return a.lat.toFixed(2)+"، "+a.lon.toFixed(2)+" ("+a.km+" كم)"; }).join(" · ") : "";
+  }
+  function closeDl(){ dlP.hidden = true; }
+  $("#dlClose").addEventListener("click", closeDl);
+  ["dlRad","dlZoom","dlExtra"].forEach(function(id){ $("#"+id).addEventListener("change", dlEstimate); });
+  [].forEach.call(dlP.querySelectorAll("input[data-l]"), function(i){ i.addEventListener("change", dlEstimate); });
+  function dlProgress(done, total){
+    var pct = total ? Math.round(done/total*100) : 0;
+    $("#dlFill").style.width = pct + "%";
+    $("#dlMsg").textContent = "جارٍ تحميل الخرائط… " + pct + "% (" + done + "/" + total + ")";
+    if(done >= total && dlRun){ dlFinishTiles(); }
+  }
+  var dlExtraDone = true, dlTilesDone = true;
+  function dlFinishTiles(){ dlTilesDone = true; dlCheckAll(); }
+  function dlCheckAll(){
+    if(dlTilesDone && dlExtraDone && dlRun){
+      dlRun = false; $("#dlStart").hidden = false; $("#dlStop").hidden = true; $("#dlStart").disabled = false;
+      $("#dlFill").style.width = "100%";
+      $("#dlMsg").textContent = "اكتمل التحميل. المنطقة جاهزة للعمل بدون إنترنت.";
+      var areas = []; try{ areas = JSON.parse(store.get("dlAreas") || "[]"); }catch(e){}
+      var c = map.getCenter(); areas.push({lat:c.lat, lon:c.lng, km:+$("#dlRad").value, t:Date.now()});
+      store.set("dlAreas", JSON.stringify(areas.slice(-20)));
+    }
+  }
+  function dlNames(b, job){
+    var step = 0.2, jobs = [];
+    for(var la=Math.floor(b.getSouth()/step)*step; la<b.getNorth(); la+=step)
+      for(var lo=Math.floor(b.getWest()/step)*step; lo<b.getEast(); lo+=step)
+        jobs.push(L.latLngBounds([la, lo], [la+step, lo+step]));
+    var total = jobs.length, done = 0;
+    (function next(){
+      if(job!==dlJob || !dlRun){ return; }
+      var nb = jobs.shift();
+      if(!nb){ dlExtraDone = true; dlCheckAll(); return; }
+      var c = nb.getCenter();
+      dbIntersect(L.latLngBounds(c, c), function(has){
+        if(job!==dlJob) return;
+        if(has.length){ done++; next(); return; }
+        overpass(buildQ(nb)).then(function(els){ dbPut(chunkOf(nb, els)); }).catch(function(){}).then(function(){
+          done++; $("#dlDone").textContent = "الأسماء: " + done + "/" + total;
+          setTimeout(next, 2200);
+        });
+      });
+    })();
+    var cells = [], a0 = Math.floor(b.getSouth()), a1 = Math.floor(b.getNorth()), o0 = Math.floor(b.getWest()), o1 = Math.floor(b.getEast());
+    for(var i=a0;i<=a1;i++) for(var j=o0;j<=o1;j++) cells.push(i+","+j);
+    rSession = 0; queueCells(cells);
+  }
+  $("#dlStart").addEventListener("click", function(){
+    if(dlRun) return;
+    if(navigator.onLine===false){ $("#dlMsg").textContent = "يحتاج التحميل اتصالًا بالإنترنت."; return; }
+    var keys = dlKeys(), b = dlBounds(), z = +$("#dlZoom").value, job = ++dlJob;
+    dlRun = true; dlTilesDone = !keys.length; dlExtraDone = !$("#dlExtra").checked;
+    $("#dlStart").hidden = true; $("#dlStop").hidden = false; $("#dlFill").style.width = "0%";
+    navigator.serviceWorker.ready.then(function(reg){
+      if(job!==dlJob) return;
+      if(keys.length && reg.active) reg.active.postMessage({type:"precache", job:"area", urls:dlUrls(keys, b, z)});
+      else if(keys.length){ dlTilesDone = true; $("#dlMsg").textContent = "تعذر تشغيل التحميل في هذا المتصفح."; }
+      if($("#dlExtra").checked) dlNames(b, job);
+      if(!keys.length && !$("#dlExtra").checked) dlCheckAll();
+      $("#dlMsg").textContent = "بدأ التحميل. أبقِ الشاشة مضاءة والصفحة مفتوحة.";
+    }).catch(function(){ dlRun = false; $("#dlStart").hidden = false; $("#dlStop").hidden = true; });
+  });
+  $("#dlStop").addEventListener("click", function(){
+    dlJob++; dlRun = false;
+    navigator.serviceWorker.ready.then(function(reg){ if(reg.active) reg.active.postMessage({type:"cancel", job:"area"}); });
+    $("#dlStart").hidden = false; $("#dlStop").hidden = true; $("#dlStart").disabled = false;
+    $("#dlMsg").textContent = "تم الإيقاف. ما نُزّل يبقى محفوظًا.";
+  });
+
   /* ---------- Tidy layer picker: grouped in pairs, right-aligned ---------- */
   (function(){
     var kids = [].slice.call(chipsEl.children);
@@ -2237,12 +2390,14 @@ function setPlaceName(n){
       var gr = document.createElement("div"); gr.className = "lgrid";
       g.appendChild(t); g.appendChild(gr); chipsEl.appendChild(g); return gr;
     }
-    var gm = grp("نوع الخريطة"), gp = grp("المعالم"), gw = grp("الطقس والأمطار");
+    var gm = grp("نوع الخريطة"), gp = grp("المعالم"), gw = grp("الطقس والأمطار"), gd = grp("بدون إنترنت");
     kids.forEach(function(c){ if(c.dataset.key) gm.appendChild(c); });
     gp.appendChild(namesChip); gp.appendChild(paChip);
     ["رادار المطر","خريطة الأمطار","حركة السحب","العواصف الرعدية"].forEach(function(t){
       kids.forEach(function(c){ if(c.textContent===t) gw.appendChild(c); });
     });
+    var dlb = document.createElement("button"); dlb.type = "button"; dlb.className = "chip wide"; dlb.textContent = "تحميل منطقة للعمل بدون إنترنت";
+    dlb.addEventListener("click", openDl); gd.appendChild(dlb);
     var btn = $("#layersBtn");
     btn.addEventListener("click", function(e){
       e.stopPropagation();
